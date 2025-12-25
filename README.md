@@ -1,5 +1,137 @@
-# DSP_Nexus_P1
-DSP Nexus (RouteSync) 🚛 ⚡ 🤖The "Digital Twin" Fleet Intelligence Platform for Amazon Delivery Service Partners.DSP Nexus is a next-generation logistics tool designed to solve the chaos of the daily dispatch parking lot. Unlike simple checklists, it uses a Route-First Architecture to link temporary daily assignments (Routes) with permanent assets (Vans & Drivers), creating a complete digital twin of the operation.🚀 Key Features🧠 AI-Powered Architecture (Powered by Gemini)Schema Architect: interactively visualize and expand the database schema using AI suggestions.Smart Analysis: Click any data node (e.g., "Vans Table") to get AI-driven insights on its operational value and analytics potential.Mock Data Generator: Instantly generate realistic Amazon DSP test data (e.g., "Route CX144", "Van T12") for prototyping.Natural Language Query: Ask the "Architect" chat interface to write SQL or explain complex data flows.🔄 Route-First & Temporal LogicDaily Restart Simulation: Implements the core business rule where Route IDs (e.g., CX120) are unique only for a single day.Asset Persistence: Simulates the "New Day" transition where dynamic logs (Routes, Rosters) are archived/cleared while static assets (Drivers, Vans) persist.Composite Keys: Enforces data integrity using [Date] + [Route_ID] logic.📱 Operational workflowsVisual "Snake Walk": Sorts dispatch lists by physical parking lot topography (Rows 1-2) for efficient walking paths.The "3-Step Chain": Visualizes the critical dependency flow: Route -> Driver -> Van.🛠️ Tech StackFrontend: React 18Styling: Tailwind CSS (Glassmorphism UI)AI Integration: Google Gemini API (Flash 1.5)Visualization: SVG + React Draggable Nodes📦 InstallationClone the repo:git clone [https://github.com/yourusername/dsp-nexus.git](https://github.com/yourusername/dsp-nexus.git)
-Install dependencies:npm install
-Add your API Key:Create a .env file and add REACT_APP_GEMINI_API_KEY=your_key_hereRun the Architect:npm start
-🔮 Future Roadmap[ ] Flutter Mobile App: Offline-first mobile client for parking lot dispatchers.[ ] Supabase Integration: Moving the schema from visual prototype to actual PostgreSQL backend.[ ] Predictive Maintenance: Using historical "Issues Log" data to block assignments of faulty vans.🤝 ContributingContributions are welcome! Please focus on the Route_ID constraints when submitting PRs regarding the data model.Designed for the modern Amazon DSP.
+# DSP Nexus - Fleet Intelligence Platform
+
+The "Digital Twin" Fleet Intelligence Platform for Amazon Delivery Service Partners. DSP Nexus is a next-generation logistics tool designed to solve the chaos of the daily dispatch parking lot.
+
+## Phase 1: Authentication & App Shell
+
+This phase implements:
+- **Supabase SSR Authentication** using `@supabase/ssr` with magic link login
+- **Protected Routes** with middleware-based authentication
+- **Role-Based Navigation** (Admin, Manager, Dispatcher, Mechanic)
+- **Snake Walk Dispatch View** - sorted by zone and spot for efficient walking paths
+
+## Tech Stack
+
+- **Framework**: Next.js 16 (App Router)
+- **Authentication**: Supabase Auth SSR
+- **Styling**: Tailwind CSS
+- **Database**: Supabase (PostgreSQL with RLS)
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js 18+
+- A Supabase project with the required tables
+
+### Environment Variables
+
+Create a `.env.local` file in the root directory:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY=your_supabase_anon_key
+```
+
+### Database Requirements
+
+The following tables should exist in your Supabase project with RLS enabled:
+
+- `tenants` - Tenant/organization data
+- `tenant_members` - User-tenant relationships with roles (admin, manager, dispatcher, mechanic)
+- `work_days` - Work day records
+- `daily_assignments` - Daily dispatch assignments
+- `lot_zones` - Parking lot zones with `sort_order`
+- `lot_spots` - Parking spots with `sort_index`
+- `vans` - Fleet vehicles
+- `drivers` - Driver records
+
+### Installation
+
+```bash
+npm install
+```
+
+### Development
+
+```bash
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) to view the application.
+
+### Production Build
+
+```bash
+npm run build
+npm start
+```
+
+## Project Structure
+
+```
+src/
+├── app/
+│   ├── app/                    # Protected app routes
+│   │   ├── admin/             # Admin panel (placeholder)
+│   │   ├── dispatch/          # Snake Walk dispatch view
+│   │   ├── mechanic/          # Mechanic view (placeholder)
+│   │   ├── logout-button.tsx  # Client-side logout component
+│   │   └── page.tsx           # Dashboard with role-based navigation
+│   ├── auth/
+│   │   └── callback/          # OAuth callback handler
+│   ├── login/                 # Login page with magic link
+│   ├── layout.tsx             # Root layout
+│   └── page.tsx               # Root redirect
+├── lib/
+│   └── supabase/
+│       ├── client.ts          # Browser client (createBrowserClient)
+│       ├── server.ts          # Server client (createServerClient)
+│       └── middleware.ts      # Session management (updateSession)
+└── middleware.ts              # Auth protection middleware
+```
+
+## Authentication Flow
+
+1. User visits `/login`
+2. Enters email and requests magic link
+3. Clicks magic link in email
+4. Redirected to `/auth/callback` which exchanges code for session
+5. Redirected to `/app` dashboard
+6. Role-based navigation displayed based on `tenant_members.role`
+
+## Key Features
+
+### Middleware Protection
+
+All `/app/*` routes are protected by middleware that:
+- Uses `supabase.auth.getClaims()` to validate the session
+- Redirects unauthenticated users to `/login`
+- Redirects authenticated users from `/login` to `/app`
+
+### Cookie Handling
+
+Following Supabase SSR best practices:
+- Uses ONLY `getAll()` and `setAll()` for cookie operations
+- Never uses deprecated `get`, `set`, `remove` methods
+- Properly handles cookie updates in both Server Components and Route Handlers
+
+### Snake Walk View
+
+The dispatch page queries daily assignments and sorts them by:
+1. Zone `sort_order` (ascending)
+2. Spot `sort_index` (ascending)
+
+This creates an efficient walking path through the parking lot.
+
+## Roadmap
+
+- [x] Phase 1: Authentication & App Shell
+- [ ] Phase 2: Import Airlock (Admin data import)
+- [ ] Phase 3: Real-time Dispatch Updates
+- [ ] Phase 4: Mechanic Issue Tracking
+- [ ] Phase 5: Mobile PWA Optimization
+
+## License
+
+Apache 2.0
