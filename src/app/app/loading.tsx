@@ -1,6 +1,10 @@
 export default function Loading() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center">
+    <div
+      className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center"
+      role="status"
+      aria-live="polite"
+    >
       <div className="text-center">
         <div className="inline-block">
           <svg
@@ -8,7 +12,7 @@ export default function Loading() {
             xmlns="http://www.w3.org/2000/svg"
             fill="none"
             viewBox="0 0 24 24"
-            aria-label="Loading"
+            aria-hidden="true"
           >
             <circle
               className="opacity-25"
