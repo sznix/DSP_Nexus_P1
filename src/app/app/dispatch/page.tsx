@@ -68,10 +68,9 @@ export default async function DispatchPage() {
   const tenantId = memberData.tenant_id;
   const tenantName = memberData.tenant?.name ?? "Unknown Tenant";
 
-  // Use timezone-aware date for consistent querying
-  const timeZone = "America/Los_Angeles";
-  const today = todayInTimeZone(timeZone);
-  const displayDate = formatDateForDisplay(timeZone);
+  // Use timezone-aware date for consistent querying (uses NEXT_PUBLIC_DEFAULT_TIMEZONE)
+  const today = todayInTimeZone();
+  const displayDate = formatDateForDisplay();
 
   // Query daily_assignments for today, ordered by zone.sort_order and spot.sort_index
   const { data: assignments, error: assignmentsError } = await supabase

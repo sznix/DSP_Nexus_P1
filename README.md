@@ -31,6 +31,9 @@ Create a `.env.local` file in the root directory:
 ```env
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY=your_supabase_anon_key
+
+# Optional: Default timezone for date calculations (defaults to America/Los_Angeles)
+NEXT_PUBLIC_DEFAULT_TIMEZONE=America/Los_Angeles
 ```
 
 ### Database Requirements
@@ -87,7 +90,8 @@ src/
 │   ├── layout.tsx             # Root layout
 │   └── page.tsx               # Root redirect
 ├── components/
-│   └── AppHeader.tsx          # Shared header component
+│   ├── AppHeader.tsx          # Shared header component
+│   └── ErrorDisplay.tsx       # Shared error display component
 ├── lib/
 │   ├── utils.ts               # Utility functions (env helpers, date helpers, path validation)
 │   └── supabase/
@@ -143,7 +147,7 @@ This creates an efficient walking path through the parking lot.
 
 ### Timezone Handling
 
-Date queries use timezone-aware helpers (default: America/Los_Angeles) to ensure the displayed date matches the queried date, regardless of server timezone.
+Date queries use timezone-aware helpers to ensure the displayed date matches the queried date, regardless of server timezone. Configure via `NEXT_PUBLIC_DEFAULT_TIMEZONE` environment variable (defaults to `America/Los_Angeles`).
 
 ## Roadmap
 

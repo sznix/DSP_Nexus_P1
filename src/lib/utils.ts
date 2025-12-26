@@ -52,12 +52,21 @@ export function safeNextPath(nextParam: string | null): string {
 }
 
 /**
+ * Get the configured timezone from environment or use default.
+ * Can be overridden per-tenant in the future.
+ */
+export function getDefaultTimeZone(): string {
+  return process.env.NEXT_PUBLIC_DEFAULT_TIMEZONE ?? "America/Los_Angeles";
+}
+
+/**
  * Get today's date in YYYY-MM-DD format for a specific timezone.
  * Uses Intl.DateTimeFormat which is available in all modern environments.
  */
-export function todayInTimeZone(timeZone: string = "America/Los_Angeles"): string {
+export function todayInTimeZone(timeZone?: string): string {
+  const tz = timeZone ?? getDefaultTimeZone();
   const formatter = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
+    timeZone: tz,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -68,11 +77,10 @@ export function todayInTimeZone(timeZone: string = "America/Los_Angeles"): strin
 /**
  * Format a date for display in a specific timezone
  */
-export function formatDateForDisplay(
-  timeZone: string = "America/Los_Angeles"
-): string {
+export function formatDateForDisplay(timeZone?: string): string {
+  const tz = timeZone ?? getDefaultTimeZone();
   return new Date().toLocaleDateString("en-US", {
-    timeZone,
+    timeZone: tz,
     weekday: "long",
     year: "numeric",
     month: "long",
