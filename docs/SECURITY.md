@@ -61,6 +61,149 @@ The Next.js middleware:
 - Redirects unauthenticated users to `/login?next=<original_path>`
 - Redirects authenticated users away from `/login`
 
+### API Route Authorization
+
+**CRITICAL**: API routes are excluded from middleware and MUST enforce their own authentication and authorization.
+
+For API routes that modify data, use the `requireRole()` utility from `src/lib/auth.ts`:
+
+```typescript
+import { requireRole } from "@/lib/auth";
+
+export async function POST(request: Request) {
+  // Returns user data or throws 401/403 response
+  const { userId, tenantId, role } = await requireRole(["admin", "manager"]);
+
+  // Proceed with authorized operation...
+}
+```
+
+### Import Airlock API Requirements
+
+**All Import Airlock API routes MUST enforce admin/manager role server-side**, not just UI gating.
+
+The `import_batches` and `daily_assignments` tables have RLS policies that only allow INSERT for admin/manager roles. If a non-admin/manager somehow hits these endpoints:
+
+1. **Return 403 immediately** - before any database work
+2. **Do not rely on RLS alone** - RLS errors expose that the operation was attempted
+3. **Log unauthorized attempts** - for security monitoring
+
+Required endpoints and their role requirements:
+
+| Endpoint | Method | Required Roles | Notes |
+|----------|--------|----------------|-------|
+| `/api/import/upload` | POST | admin, manager | Upload CSV/Excel files |
+| `/api/import/validate` | POST | admin, manager | Validate import data |
+| `/api/import/publish` | POST | admin, manager | Publish to daily_assignments |
+| `/api/import/[id]` | GET | admin, manager | Get import batch details |
+| `/api/import/[id]` | DELETE | admin | Delete import batch |
+
+### Snake Walk (Dispatch View) Requirements
+
+**Snake Walk must only PATCH existing `daily_assignments` rows - NEVER INSERT.**
+
+The dispatcher role has:
+- ✅ **SELECT** on `daily_assignments` - can view assignments
+- ✅ **UPDATE** on `daily_assignments` - can PATCH status fields
+- ❌ **INSERT** on `daily_assignments` - BLOCKED by RLS
+- ❌ **DELETE** on `daily_assignments` - BLOCKED by RLS
+
+**Never allow Snake Walk to create new assignments** - all assignments come from Import Airlock.
+
+### `daily_assignments` Hard Rules (RLS-Aware Replication)
+
+These rules MUST be enforced at the API layer for dispatcher sessions:
+
+#### 1. DISALLOW Client INSERTs
+
+```
+❌ INSERT INTO daily_assignments → 403 Forbidden (dispatcher)
+✅ INSERT INTO daily_assignments → Allowed (admin, manager only)
+```
+
+Any push/sync path receiving INSERT operations from a dispatcher session MUST:
+- **Reject with 403 immediately** - before any DB work
+- **Log the unauthorized attempt** - for security monitoring
+- *(Future: transform into "request" record if we add that feature)*
+
+#### 2. Whitelisted PATCH Columns Only
+
+Dispatcher UPDATE operations are restricted to these columns ONLY:
+
+```typescript
+const DISPATCHER_PATCHABLE_COLUMNS = [
+  "card_status",
+  "key_status",
+  "current_key_holder_id",
+  "verification_status",
+  "verification_timestamp",
+  "verification_user_id",
+  "rollout_status",
+  "rollout_timestamp",
+  "rollout_user_id",
+  "cart_location",
+  "notes",
+] as const;
+```
+
+Any PATCH attempting to modify columns NOT in this whitelist MUST be rejected with 403.
+
+**Columns dispatchers CANNOT modify:**
+- `id`, `tenant_id`, `day_date` (identity/ownership)
+- `van_id`, `driver_id`, `lot_spot_id` (assignment data - Import Airlock only)
+- `pad`, `dispatch_time` (schedule data - Import Airlock only)
+- `created_at`, `updated_at` (system fields)
+
+#### 3. Atomic PATCH Updates Only
+
+```typescript
+// ✅ ALLOWED: Atomic PATCH of whitelisted fields
+await supabase
+  .from("daily_assignments")
+  .update({ key_status: "collected", current_key_holder_id: userId })
+  .eq("id", assignmentId);
+
+// ❌ BLOCKED: Bulk updates without specific ID
+await supabase
+  .from("daily_assignments")
+  .update({ key_status: "collected" })
+  .eq("day_date", today); // NO - must target specific row
+
+// ❌ BLOCKED: Upsert (INSERT or UPDATE)
+await supabase
+  .from("daily_assignments")
+  .upsert({ ... }); // NO - dispatcher cannot INSERT
+```
+
+#### 4. Replication Mode: Read + Patch-Update Only
+
+For offline-first / sync scenarios, dispatcher devices operate in restricted mode:
+
+| Operation | Dispatcher | Admin/Manager |
+|-----------|------------|---------------|
+| Pull (SELECT) | ✅ Allowed | ✅ Allowed |
+| Push INSERT | ❌ 403 Reject | ✅ Allowed |
+| Push UPDATE (whitelisted) | ✅ Allowed | ✅ Allowed |
+| Push UPDATE (other cols) | ❌ 403 Reject | ✅ Allowed |
+| Push DELETE | ❌ 403 Reject | ✅ Admin only |
+
+**Implementation checklist for sync endpoints:**
+- [ ] Check user role before processing push operations
+- [ ] Validate operation type (reject INSERT for dispatcher)
+- [ ] Validate columns being modified against whitelist
+- [ ] Return 403 with clear error message on violation
+- [ ] Log all rejected operations for audit
+
+### Mechanic Role Restrictions
+
+The mechanic role is intentionally restricted:
+- ❌ **Cannot SELECT `daily_assignments`** - RLS blocks all queries
+- ❌ **Cannot access `/app/dispatch`** - application-level role check
+- ✅ **Can SELECT `van_reports`** - for viewing maintenance tasks
+- ✅ **Can access `/app/mechanic`** - their designated view
+
+If a mechanic somehow reaches the dispatch page or API, both application AND database layers will block access.
+
 ## Multi-Tenant Isolation
 
 ### Tenant Structure
@@ -83,7 +226,7 @@ The following tables require RLS policies:
 |-------|--------|--------|--------|--------|
 | `tenants` | Own tenant only | Admin | Admin | - |
 | `tenant_members` | Own tenant members | Admin | Admin | Admin |
-| `daily_assignments` | admin, manager, dispatcher | admin, manager | admin, manager | admin |
+| `daily_assignments` | admin, manager, dispatcher | admin, manager | admin, manager, dispatcher | admin |
 | `lot_zones` | Own tenant | admin, manager | admin, manager | admin |
 | `lot_spots` | Own tenant | admin, manager | admin, manager | admin |
 | `vans` | Own tenant | admin, manager | admin, manager | admin |
@@ -91,6 +234,10 @@ The following tables require RLS policies:
 | `work_days` | Own tenant | admin, manager | admin, manager | admin |
 | `imports` | admin, manager | admin, manager | admin, manager | admin |
 | `van_reports` | admin, manager, mechanic | admin, manager, dispatcher | admin, manager | admin |
+
+**Note on `daily_assignments`:**
+- **Mechanic cannot SELECT** - intentionally blocked, no business need
+- **Dispatcher can UPDATE but NOT INSERT** - Snake Walk only patches existing rows
 
 See `supabase/rls_role_policies.sql` for example policy implementations.
 
@@ -161,9 +308,11 @@ When adding new features, ensure:
 2. [ ] RLS policies enforce tenant isolation
 3. [ ] RLS policies check user roles for sensitive operations
 4. [ ] Application-level role checks are added to protected pages
-5. [ ] API routes validate input and sanitize data
-6. [ ] Rate limiting is applied to public-facing endpoints
-7. [ ] Sensitive data is not exposed in client-side code
+5. [ ] **API routes use `requireRole()` to enforce authorization server-side**
+6. [ ] **Unauthorized API attempts return 401/403 BEFORE any DB operations**
+7. [ ] API routes validate input and sanitize data
+8. [ ] Rate limiting is applied to public-facing endpoints
+9. [ ] Sensitive data is not exposed in client-side code
 
 ## Reporting Security Issues
 

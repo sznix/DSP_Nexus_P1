@@ -95,10 +95,21 @@ USING (
 -- DAILY_ASSIGNMENTS TABLE
 -- =============================================================================
 -- Core dispatch data - role-based access
+--
+-- IMPORTANT ACCESS RULES:
+-- - SELECT: admin, manager, dispatcher ONLY (mechanic CANNOT query this table)
+-- - INSERT: admin, manager ONLY (created via Import Airlock, NEVER from Snake Walk)
+-- - UPDATE: admin, manager, dispatcher (Snake Walk uses PATCH to update existing rows)
+-- - DELETE: admin ONLY
+--
+-- Snake Walk (dispatch view) must only PATCH existing rows, never INSERT new ones.
+-- Mechanic role is intentionally blocked from SELECT - they have no business need
+-- to see daily assignments.
 
 ALTER TABLE public.daily_assignments ENABLE ROW LEVEL SECURITY;
 
 -- SELECT: admin, manager, dispatcher can view assignments
+-- NOTE: mechanic is intentionally EXCLUDED - they cannot query this table
 CREATE POLICY "daily_assignments_select_by_role"
 ON public.daily_assignments
 FOR SELECT
@@ -108,6 +119,7 @@ USING (
 );
 
 -- INSERT: Only admin and manager can create assignments
+-- NOTE: Assignments are created via Import Airlock, NEVER from Snake Walk UI
 CREATE POLICY "daily_assignments_insert_admin_manager"
 ON public.daily_assignments
 FOR INSERT
@@ -116,13 +128,15 @@ WITH CHECK (
   AND auth.has_role(ARRAY['admin', 'manager'])
 );
 
--- UPDATE: Only admin and manager can update assignments
-CREATE POLICY "daily_assignments_update_admin_manager"
+-- UPDATE: admin, manager, AND dispatcher can update assignments
+-- NOTE: Dispatcher needs UPDATE for Snake Walk to PATCH verification_status, key_status, etc.
+-- Dispatcher has UPDATE but NOT INSERT - they can only modify existing rows
+CREATE POLICY "daily_assignments_update_by_role"
 ON public.daily_assignments
 FOR UPDATE
 USING (
   tenant_id = auth.user_tenant_id()
-  AND auth.has_role(ARRAY['admin', 'manager'])
+  AND auth.has_role(ARRAY['admin', 'manager', 'dispatcher'])
 );
 
 -- DELETE: Only admin can delete assignments
