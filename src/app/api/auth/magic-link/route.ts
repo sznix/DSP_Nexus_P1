@@ -90,8 +90,17 @@ export async function POST(request: Request) {
     const safeRedirect = safeNextPath(redirectTo || null);
 
     // Construct the full redirect URL for the auth callback
-    const origin = request.headers.get("origin") || "";
-    const emailRedirectTo = `${origin}/auth/callback?next=${encodeURIComponent(safeRedirect)}`;
+    // SECURITY: Use NEXT_PUBLIC_SITE_URL instead of trusting request origin header
+    // The origin header can be spoofed by attackers to redirect magic links to malicious sites
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+    if (!siteUrl) {
+      console.error("[magic-link] NEXT_PUBLIC_SITE_URL is not configured");
+      return NextResponse.json(
+        { error: "Server configuration error" },
+        { status: 500 }
+      );
+    }
+    const emailRedirectTo = `${siteUrl}/auth/callback?next=${encodeURIComponent(safeRedirect)}`;
 
     // Send magic link via Supabase
     const supabase = getSupabaseAdmin();

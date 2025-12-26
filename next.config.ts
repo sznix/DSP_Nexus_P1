@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
-const securityHeaders = [
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+
+// Base security headers (applied in all environments)
+const baseSecurityHeaders = [
   {
     key: "Strict-Transport-Security",
     value: "max-age=31536000; includeSubDomains; preload",
@@ -21,22 +24,48 @@ const securityHeaders = [
     key: "Permissions-Policy",
     value: "camera=(), microphone=(), geolocation=()",
   },
-  // TODO: Tighten CSP later with nonces for scripts/styles.
-  // Currently in report-only mode to avoid breaking Next.js functionality.
-  {
-    key: "Content-Security-Policy-Report-Only",
-    value: [
-      "default-src 'self'",
-      "base-uri 'self'",
-      "frame-ancestors 'none'",
-      "form-action 'self'",
-      "img-src 'self' data: blob: https:",
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
-      "style-src 'self' 'unsafe-inline'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-    ].join("; "),
-  },
 ];
+
+// CSP directives shared between dev and prod
+const cspDirectives = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "frame-ancestors 'none'",
+  "form-action 'self'",
+  "img-src 'self' data: blob: https:",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+  "style-src 'self' 'unsafe-inline'", // TODO: Replace with nonces (see docs/SECURITY_TODO.md)
+];
+
+// Build environment-specific CSP
+function buildCspHeader(): { key: string; value: string } {
+  if (IS_PRODUCTION) {
+    // Production: Enforced CSP without 'unsafe-eval'
+    // 'unsafe-inline' is still needed until nonces are implemented
+    const prodCsp = [
+      ...cspDirectives,
+      "script-src 'self' 'unsafe-inline'", // No 'unsafe-eval' in production
+    ].join("; ");
+
+    return {
+      key: "Content-Security-Policy",
+      value: prodCsp,
+    };
+  }
+
+  // Development: Report-only mode with 'unsafe-eval' for HMR/React DevTools
+  const devCsp = [
+    ...cspDirectives,
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  ].join("; ");
+
+  return {
+    key: "Content-Security-Policy-Report-Only",
+    value: devCsp,
+  };
+}
+
+const securityHeaders = [...baseSecurityHeaders, buildCspHeader()];
 
 const nextConfig: NextConfig = {
   async headers() {
