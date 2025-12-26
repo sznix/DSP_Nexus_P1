@@ -61,6 +61,43 @@ The Next.js middleware:
 - Redirects unauthenticated users to `/login?next=<original_path>`
 - Redirects authenticated users away from `/login`
 
+### API Route Authorization
+
+**CRITICAL**: API routes are excluded from middleware and MUST enforce their own authentication and authorization.
+
+For API routes that modify data, use the `requireRole()` utility from `src/lib/auth.ts`:
+
+```typescript
+import { requireRole } from "@/lib/auth";
+
+export async function POST(request: Request) {
+  // Returns user data or throws 401/403 response
+  const { userId, tenantId, role } = await requireRole(["admin", "manager"]);
+
+  // Proceed with authorized operation...
+}
+```
+
+### Import Airlock API Requirements
+
+**All Import Airlock API routes MUST enforce admin/manager role server-side**, not just UI gating.
+
+The `import_batches` and `daily_assignments` tables have RLS policies that only allow INSERT for admin/manager roles. If a non-admin/manager somehow hits these endpoints:
+
+1. **Return 403 immediately** - before any database work
+2. **Do not rely on RLS alone** - RLS errors expose that the operation was attempted
+3. **Log unauthorized attempts** - for security monitoring
+
+Required endpoints and their role requirements:
+
+| Endpoint | Method | Required Roles | Notes |
+|----------|--------|----------------|-------|
+| `/api/import/upload` | POST | admin, manager | Upload CSV/Excel files |
+| `/api/import/validate` | POST | admin, manager | Validate import data |
+| `/api/import/publish` | POST | admin, manager | Publish to daily_assignments |
+| `/api/import/[id]` | GET | admin, manager | Get import batch details |
+| `/api/import/[id]` | DELETE | admin | Delete import batch |
+
 ## Multi-Tenant Isolation
 
 ### Tenant Structure
@@ -161,9 +198,11 @@ When adding new features, ensure:
 2. [ ] RLS policies enforce tenant isolation
 3. [ ] RLS policies check user roles for sensitive operations
 4. [ ] Application-level role checks are added to protected pages
-5. [ ] API routes validate input and sanitize data
-6. [ ] Rate limiting is applied to public-facing endpoints
-7. [ ] Sensitive data is not exposed in client-side code
+5. [ ] **API routes use `requireRole()` to enforce authorization server-side**
+6. [ ] **Unauthorized API attempts return 401/403 BEFORE any DB operations**
+7. [ ] API routes validate input and sanitize data
+8. [ ] Rate limiting is applied to public-facing endpoints
+9. [ ] Sensitive data is not exposed in client-side code
 
 ## Reporting Security Issues
 
