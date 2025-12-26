@@ -108,18 +108,91 @@ The dispatcher role has:
 - ❌ **INSERT** on `daily_assignments` - BLOCKED by RLS
 - ❌ **DELETE** on `daily_assignments` - BLOCKED by RLS
 
-Application requirements:
-1. **Snake Walk API routes must use UPDATE/PATCH only** - never INSERT
-2. **If dispatcher attempts INSERT, RLS will block it** - but app should prevent this
-3. **Mechanic role cannot access Snake Walk** - RLS blocks SELECT on `daily_assignments`
-
-Allowed PATCH fields for dispatcher:
-- `verification_status`
-- `key_status`
-- `cart_location`
-- Other status/tracking fields
-
 **Never allow Snake Walk to create new assignments** - all assignments come from Import Airlock.
+
+### `daily_assignments` Hard Rules (RLS-Aware Replication)
+
+These rules MUST be enforced at the API layer for dispatcher sessions:
+
+#### 1. DISALLOW Client INSERTs
+
+```
+❌ INSERT INTO daily_assignments → 403 Forbidden (dispatcher)
+✅ INSERT INTO daily_assignments → Allowed (admin, manager only)
+```
+
+Any push/sync path receiving INSERT operations from a dispatcher session MUST:
+- **Reject with 403 immediately** - before any DB work
+- **Log the unauthorized attempt** - for security monitoring
+- *(Future: transform into "request" record if we add that feature)*
+
+#### 2. Whitelisted PATCH Columns Only
+
+Dispatcher UPDATE operations are restricted to these columns ONLY:
+
+```typescript
+const DISPATCHER_PATCHABLE_COLUMNS = [
+  "card_status",
+  "key_status",
+  "current_key_holder_id",
+  "verification_status",
+  "verification_timestamp",
+  "verification_user_id",
+  "rollout_status",
+  "rollout_timestamp",
+  "rollout_user_id",
+  "cart_location",
+  "notes",
+] as const;
+```
+
+Any PATCH attempting to modify columns NOT in this whitelist MUST be rejected with 403.
+
+**Columns dispatchers CANNOT modify:**
+- `id`, `tenant_id`, `day_date` (identity/ownership)
+- `van_id`, `driver_id`, `lot_spot_id` (assignment data - Import Airlock only)
+- `pad`, `dispatch_time` (schedule data - Import Airlock only)
+- `created_at`, `updated_at` (system fields)
+
+#### 3. Atomic PATCH Updates Only
+
+```typescript
+// ✅ ALLOWED: Atomic PATCH of whitelisted fields
+await supabase
+  .from("daily_assignments")
+  .update({ key_status: "collected", current_key_holder_id: userId })
+  .eq("id", assignmentId);
+
+// ❌ BLOCKED: Bulk updates without specific ID
+await supabase
+  .from("daily_assignments")
+  .update({ key_status: "collected" })
+  .eq("day_date", today); // NO - must target specific row
+
+// ❌ BLOCKED: Upsert (INSERT or UPDATE)
+await supabase
+  .from("daily_assignments")
+  .upsert({ ... }); // NO - dispatcher cannot INSERT
+```
+
+#### 4. Replication Mode: Read + Patch-Update Only
+
+For offline-first / sync scenarios, dispatcher devices operate in restricted mode:
+
+| Operation | Dispatcher | Admin/Manager |
+|-----------|------------|---------------|
+| Pull (SELECT) | ✅ Allowed | ✅ Allowed |
+| Push INSERT | ❌ 403 Reject | ✅ Allowed |
+| Push UPDATE (whitelisted) | ✅ Allowed | ✅ Allowed |
+| Push UPDATE (other cols) | ❌ 403 Reject | ✅ Allowed |
+| Push DELETE | ❌ 403 Reject | ✅ Admin only |
+
+**Implementation checklist for sync endpoints:**
+- [ ] Check user role before processing push operations
+- [ ] Validate operation type (reject INSERT for dispatcher)
+- [ ] Validate columns being modified against whitelist
+- [ ] Return 403 with clear error message on violation
+- [ ] Log all rejected operations for audit
 
 ### Mechanic Role Restrictions
 
