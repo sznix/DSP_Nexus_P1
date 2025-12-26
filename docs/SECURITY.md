@@ -98,6 +98,39 @@ Required endpoints and their role requirements:
 | `/api/import/[id]` | GET | admin, manager | Get import batch details |
 | `/api/import/[id]` | DELETE | admin | Delete import batch |
 
+### Snake Walk (Dispatch View) Requirements
+
+**Snake Walk must only PATCH existing `daily_assignments` rows - NEVER INSERT.**
+
+The dispatcher role has:
+- ✅ **SELECT** on `daily_assignments` - can view assignments
+- ✅ **UPDATE** on `daily_assignments` - can PATCH status fields
+- ❌ **INSERT** on `daily_assignments` - BLOCKED by RLS
+- ❌ **DELETE** on `daily_assignments` - BLOCKED by RLS
+
+Application requirements:
+1. **Snake Walk API routes must use UPDATE/PATCH only** - never INSERT
+2. **If dispatcher attempts INSERT, RLS will block it** - but app should prevent this
+3. **Mechanic role cannot access Snake Walk** - RLS blocks SELECT on `daily_assignments`
+
+Allowed PATCH fields for dispatcher:
+- `verification_status`
+- `key_status`
+- `cart_location`
+- Other status/tracking fields
+
+**Never allow Snake Walk to create new assignments** - all assignments come from Import Airlock.
+
+### Mechanic Role Restrictions
+
+The mechanic role is intentionally restricted:
+- ❌ **Cannot SELECT `daily_assignments`** - RLS blocks all queries
+- ❌ **Cannot access `/app/dispatch`** - application-level role check
+- ✅ **Can SELECT `van_reports`** - for viewing maintenance tasks
+- ✅ **Can access `/app/mechanic`** - their designated view
+
+If a mechanic somehow reaches the dispatch page or API, both application AND database layers will block access.
+
 ## Multi-Tenant Isolation
 
 ### Tenant Structure
@@ -120,7 +153,7 @@ The following tables require RLS policies:
 |-------|--------|--------|--------|--------|
 | `tenants` | Own tenant only | Admin | Admin | - |
 | `tenant_members` | Own tenant members | Admin | Admin | Admin |
-| `daily_assignments` | admin, manager, dispatcher | admin, manager | admin, manager | admin |
+| `daily_assignments` | admin, manager, dispatcher | admin, manager | admin, manager, dispatcher | admin |
 | `lot_zones` | Own tenant | admin, manager | admin, manager | admin |
 | `lot_spots` | Own tenant | admin, manager | admin, manager | admin |
 | `vans` | Own tenant | admin, manager | admin, manager | admin |
@@ -128,6 +161,10 @@ The following tables require RLS policies:
 | `work_days` | Own tenant | admin, manager | admin, manager | admin |
 | `imports` | admin, manager | admin, manager | admin, manager | admin |
 | `van_reports` | admin, manager, mechanic | admin, manager, dispatcher | admin, manager | admin |
+
+**Note on `daily_assignments`:**
+- **Mechanic cannot SELECT** - intentionally blocked, no business need
+- **Dispatcher can UPDATE but NOT INSERT** - Snake Walk only patches existing rows
 
 See `supabase/rls_role_policies.sql` for example policy implementations.
 
