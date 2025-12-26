@@ -1,12 +1,20 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import Link from "next/link";
-import LogoutButton from "../logout-button";
+import AppHeader from "@/components/AppHeader";
+
+// Allowed roles for mechanic page (mechanic-only by default)
+const ALLOWED_ROLES = ["mechanic"] as const;
+
+type TenantMemberData = {
+  role: string;
+  tenant: { name: string } | null;
+};
 
 export default async function MechanicPage() {
   const supabase = await createClient();
 
-  const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
+  const { data: claimsData, error: claimsError } =
+    await supabase.auth.getClaims();
 
   if (claimsError || !claimsData) {
     redirect("/login");
@@ -14,55 +22,28 @@ export default async function MechanicPage() {
 
   const userId = claimsData.claims.sub;
 
-  // Get tenant info
+  // Get tenant info using alias syntax for proper typing
   const { data: memberData, error: memberError } = await supabase
     .from("tenant_members")
-    .select("role, tenants(name)")
+    .select("role, tenant:tenants(name)")
     .eq("user_id", userId)
-    .single();
+    .single<TenantMemberData>();
 
   if (memberError || !memberData) {
     redirect("/app");
   }
 
-  const tenants = memberData.tenants as unknown as { name: string } | null;
-  const tenantName = tenants?.name ?? "Unknown Tenant";
+  const role = memberData.role;
+  const tenantName = memberData.tenant?.name ?? "Unknown Tenant";
+
+  // Role-based access control: Only mechanic role can access this page
+  if (!ALLOWED_ROLES.includes(role as (typeof ALLOWED_ROLES)[number])) {
+    redirect("/app");
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800">
-      {/* Header */}
-      <header className="bg-white/5 backdrop-blur-lg border-b border-white/10 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <Link
-                href="/app"
-                className="text-slate-400 hover:text-white transition"
-              >
-                <svg
-                  className="w-6 h-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M15 19l-7-7 7-7"
-                  />
-                </svg>
-              </Link>
-              <h1 className="text-xl font-bold text-white">Mechanic View</h1>
-              <span className="hidden sm:inline-block text-slate-400">|</span>
-              <span className="hidden sm:inline-block text-slate-300">
-                {tenantName}
-              </span>
-            </div>
-            <LogoutButton />
-          </div>
-        </div>
-      </header>
+      <AppHeader title="Mechanic View" tenantName={tenantName} showBackButton />
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -73,6 +54,7 @@ export default async function MechanicPage() {
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
+              aria-hidden="true"
             >
               <path
                 strokeLinecap="round"
@@ -94,8 +76,8 @@ export default async function MechanicPage() {
           </h2>
           <p className="text-slate-400 max-w-md mx-auto">
             The mechanic dashboard will be available in an upcoming phase.
-            You&apos;ll be able to view vehicle maintenance tasks, report issues,
-            and track repairs.
+            You&apos;ll be able to view vehicle maintenance tasks, report
+            issues, and track repairs.
           </p>
 
           <div className="mt-8 flex flex-wrap justify-center gap-4">

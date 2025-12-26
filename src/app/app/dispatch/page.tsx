@@ -1,7 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import Link from "next/link";
-import LogoutButton from "../logout-button";
+import { todayInTimeZone, formatDateForDisplay } from "@/lib/utils";
+import AppHeader from "@/components/AppHeader";
+
+// Allowed roles for dispatch page
+const ALLOWED_ROLES = ["admin", "manager", "dispatcher"] as const;
 
 type DailyAssignment = {
   id: string;
@@ -27,10 +30,17 @@ type DailyAssignment = {
   } | null;
 };
 
+type TenantMemberData = {
+  tenant_id: string;
+  role: string;
+  tenant: { name: string } | null;
+};
+
 export default async function DispatchPage() {
   const supabase = await createClient();
 
-  const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
+  const { data: claimsData, error: claimsError } =
+    await supabase.auth.getClaims();
 
   if (claimsError || !claimsData) {
     redirect("/login");
@@ -38,23 +48,30 @@ export default async function DispatchPage() {
 
   const userId = claimsData.claims.sub;
 
-  // Get tenant_id from tenant_members
+  // Get tenant_id and role from tenant_members using alias syntax for proper typing
   const { data: memberData, error: memberError } = await supabase
     .from("tenant_members")
-    .select("tenant_id, tenants(name)")
+    .select("tenant_id, role, tenant:tenants(name)")
     .eq("user_id", userId)
-    .single();
+    .single<TenantMemberData>();
 
   if (memberError || !memberData) {
     redirect("/app");
   }
 
-  const tenantId = memberData.tenant_id;
-  const tenants = memberData.tenants as unknown as { name: string } | null;
-  const tenantName = tenants?.name ?? "Unknown Tenant";
+  // Role-based access control
+  const role = memberData.role;
+  if (!ALLOWED_ROLES.includes(role as (typeof ALLOWED_ROLES)[number])) {
+    redirect("/app");
+  }
 
-  // Get today's date in YYYY-MM-DD format (server date)
-  const today = new Date().toISOString().split("T")[0];
+  const tenantId = memberData.tenant_id;
+  const tenantName = memberData.tenant?.name ?? "Unknown Tenant";
+
+  // Use timezone-aware date for consistent querying
+  const timeZone = "America/Los_Angeles";
+  const today = todayInTimeZone(timeZone);
+  const displayDate = formatDateForDisplay(timeZone);
 
   // Query daily_assignments for today, ordered by zone.sort_order and spot.sort_index
   const { data: assignments, error: assignmentsError } = await supabase
@@ -127,39 +144,7 @@ export default async function DispatchPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800">
-      {/* Header */}
-      <header className="bg-white/5 backdrop-blur-lg border-b border-white/10 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <Link
-                href="/app"
-                className="text-slate-400 hover:text-white transition"
-              >
-                <svg
-                  className="w-6 h-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M15 19l-7-7 7-7"
-                  />
-                </svg>
-              </Link>
-              <h1 className="text-xl font-bold text-white">Snake Walk</h1>
-              <span className="hidden sm:inline-block text-slate-400">|</span>
-              <span className="hidden sm:inline-block text-slate-300">
-                {tenantName}
-              </span>
-            </div>
-            <LogoutButton />
-          </div>
-        </div>
-      </header>
+      <AppHeader title="Snake Walk" tenantName={tenantName} showBackButton />
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -167,14 +152,7 @@ export default async function DispatchPage() {
           <h2 className="text-2xl font-bold text-white mb-1">
             Today&apos;s Dispatch
           </h2>
-          <p className="text-slate-400">
-            {new Date().toLocaleDateString("en-US", {
-              weekday: "long",
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            })}
-          </p>
+          <p className="text-slate-400">{displayDate}</p>
         </div>
 
         {assignmentsError ? (
@@ -188,6 +166,7 @@ export default async function DispatchPage() {
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
+              aria-hidden="true"
             >
               <path
                 strokeLinecap="round"

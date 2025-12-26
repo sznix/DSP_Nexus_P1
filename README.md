@@ -73,17 +73,23 @@ npm start
 src/
 ├── app/
 │   ├── app/                    # Protected app routes
-│   │   ├── admin/             # Admin panel (placeholder)
-│   │   ├── dispatch/          # Snake Walk dispatch view
-│   │   ├── mechanic/          # Mechanic view (placeholder)
+│   │   ├── admin/             # Admin panel (admin, manager only)
+│   │   ├── dispatch/          # Snake Walk dispatch view (admin, manager, dispatcher)
+│   │   ├── mechanic/          # Mechanic view (mechanic only)
+│   │   ├── error.tsx          # Error boundary for /app routes
+│   │   ├── loading.tsx        # Loading UI for /app routes
 │   │   ├── logout-button.tsx  # Client-side logout component
 │   │   └── page.tsx           # Dashboard with role-based navigation
 │   ├── auth/
-│   │   └── callback/          # OAuth callback handler
+│   │   └── callback/          # OAuth callback handler (with open redirect protection)
 │   ├── login/                 # Login page with magic link
+│   ├── error.tsx              # Global error boundary
 │   ├── layout.tsx             # Root layout
 │   └── page.tsx               # Root redirect
+├── components/
+│   └── AppHeader.tsx          # Shared header component
 ├── lib/
+│   ├── utils.ts               # Utility functions (env helpers, date helpers, path validation)
 │   └── supabase/
 │       ├── client.ts          # Browser client (createBrowserClient)
 │       ├── server.ts          # Server client (createServerClient)
@@ -115,6 +121,17 @@ Following Supabase SSR best practices:
 - Uses ONLY `getAll()` and `setAll()` for cookie operations
 - Never uses deprecated `get`, `set`, `remove` methods
 - Properly handles cookie updates in both Server Components and Route Handlers
+- Middleware stashes cookies to apply to redirect responses (prevents auth loops)
+
+### Security Features
+
+- **Open Redirect Protection**: Auth callback validates redirect paths to prevent external redirects
+- **Role-Based Access Control**: Each protected page enforces role checks (not just navigation)
+  - `/app/admin`: admin, manager
+  - `/app/dispatch`: admin, manager, dispatcher
+  - `/app/mechanic`: mechanic
+- **Environment Variable Validation**: Runtime checks for required environment variables
+- **Email Sanitization**: Login form trims and lowercases email before submission
 
 ### Snake Walk View
 
@@ -123,6 +140,10 @@ The dispatch page queries daily assignments and sorts them by:
 2. Spot `sort_index` (ascending)
 
 This creates an efficient walking path through the parking lot.
+
+### Timezone Handling
+
+Date queries use timezone-aware helpers (default: America/Los_Angeles) to ensure the displayed date matches the queried date, regardless of server timezone.
 
 ## Roadmap
 
