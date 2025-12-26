@@ -2,12 +2,12 @@
 
 import { useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 
-// Error messages for callback errors
+// Error messages for callback errors and API responses
 const ERROR_MESSAGES: Record<string, string> = {
   auth_callback_error: "Authentication failed. Please try signing in again.",
   session_expired: "Your session has expired. Please sign in again.",
+  rate_limited: "Too many requests. Please wait a few minutes before trying again.",
 };
 
 function getInitialMessage(
@@ -23,6 +23,7 @@ function getInitialMessage(
 function LoginForm() {
   const searchParams = useSearchParams();
   const errorParam = searchParams.get("error");
+  const nextParam = searchParams.get("next");
 
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
@@ -46,22 +47,39 @@ function LoginForm() {
     }
 
     try {
-      const supabase = createClient();
-      const origin = window.location.origin;
-
-      const { error } = await supabase.auth.signInWithOtp({
-        email: sanitizedEmail,
-        options: {
-          emailRedirectTo: `${origin}/auth/callback`,
+      // Use server-side API route for rate limiting
+      const response = await fetch("/api/auth/magic-link", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
+        body: JSON.stringify({
+          email: sanitizedEmail,
+          redirectTo: nextParam || "/app",
+        }),
       });
 
-      if (error) {
-        setMessage({ type: "error", text: error.message });
+      const data = await response.json();
+
+      if (!response.ok) {
+        // Handle rate limiting specifically
+        if (response.status === 429) {
+          const retryAfter = data.retryAfter || 60;
+          const minutes = Math.ceil(retryAfter / 60);
+          setMessage({
+            type: "error",
+            text: `Too many requests. Please wait ${minutes} minute${minutes > 1 ? "s" : ""} before trying again.`,
+          });
+        } else {
+          setMessage({
+            type: "error",
+            text: data.error || "Failed to send magic link. Please try again.",
+          });
+        }
       } else {
         setMessage({
           type: "success",
-          text: "Check your email for the magic link!",
+          text: data.message || "Check your email for the magic link!",
         });
         setEmail("");
       }
@@ -109,7 +127,7 @@ function LoginForm() {
               xmlns="http://www.w3.org/2000/svg"
               fill="none"
               viewBox="0 0 24 24"
-              aria-label="Loading"
+              aria-hidden="true"
             >
               <circle
                 className="opacity-25"
