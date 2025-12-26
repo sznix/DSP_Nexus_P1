@@ -14,7 +14,8 @@ type TenantMember = {
 export default async function AppPage() {
   const supabase = await createClient();
 
-  const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
+  const { data: claimsData, error: claimsError } =
+    await supabase.auth.getClaims();
 
   if (claimsError || !claimsData) {
     redirect("/login");
@@ -48,6 +49,7 @@ export default async function AppPage() {
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
+              aria-hidden="true"
             >
               <path
                 strokeLinecap="round"
@@ -57,7 +59,9 @@ export default async function AppPage() {
               />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-white mb-4">No Tenant Access</h1>
+          <h1 className="text-2xl font-bold text-white mb-4">
+            No Tenant Access
+          </h1>
           <p className="text-slate-300 mb-6">
             Your account is not associated with any tenant. Please contact your
             administrator to get access.
@@ -151,7 +155,9 @@ export default async function AppPage() {
               className="group bg-white/5 backdrop-blur-lg rounded-xl border border-white/10 p-6 hover:bg-white/10 hover:border-white/20 transition duration-200"
             >
               <div className="flex items-center space-x-4">
-                <span className="text-4xl">{link.icon}</span>
+                <span className="text-4xl" aria-hidden="true">
+                  {link.icon}
+                </span>
                 <div>
                   <h3 className="text-lg font-semibold text-white group-hover:text-blue-400 transition">
                     {link.label}
