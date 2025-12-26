@@ -1,11 +1,21 @@
 /**
  * Rate limiting utilities for API routes.
  * Uses Upstash Redis in production, falls back to in-memory Map in development.
+ *
+ * SECURITY: In production, rate limiting MUST fail closed (block requests)
+ * when Redis is unavailable. This prevents abuse during Redis outages.
  */
 
-// Rate limit configuration
-const RATE_LIMIT_REQUESTS = 5;
-const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+// Rate limit configuration (configurable via environment)
+const RATE_LIMIT_REQUESTS = parseInt(
+  process.env.RATE_LIMIT_REQUESTS || "5",
+  10
+);
+const RATE_LIMIT_WINDOW_MS =
+  parseInt(process.env.RATE_LIMIT_WINDOW_MS || "900000", 10); // Default: 15 minutes
+
+// Production detection
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
 
 type RateLimitResult = {
   success: boolean;
@@ -78,6 +88,9 @@ const inMemoryLimiter = new InMemoryRateLimiter();
 /**
  * Check rate limit for a given identifier.
  * Uses Upstash Redis if configured, otherwise falls back to in-memory.
+ *
+ * SECURITY: In production, this MUST use Redis. If Redis is not configured
+ * in production, all requests are blocked (fail closed).
  */
 export async function checkRateLimit(
   identifier: string
@@ -88,6 +101,18 @@ export async function checkRateLimit(
   if (upstashUrl && upstashToken) {
     // Use Upstash Redis
     return checkUpstashRateLimit(identifier, upstashUrl, upstashToken);
+  }
+
+  // SECURITY: In production, fail closed if Redis is not configured
+  if (IS_PRODUCTION) {
+    console.error(
+      "[rate-limit] CRITICAL: Redis not configured in production. Blocking request (fail closed)."
+    );
+    return {
+      success: false,
+      remaining: 0,
+      reset: Date.now() + RATE_LIMIT_WINDOW_MS,
+    };
   }
 
   // Fallback to in-memory (dev only)
@@ -133,7 +158,11 @@ async function checkUpstashRateLimit(
 
     if (!response.ok) {
       console.error("[rate-limit] Upstash error:", await response.text());
-      // Fail open - allow request if Redis is down
+      // SECURITY: Fail closed in production, fail open in development
+      if (IS_PRODUCTION) {
+        console.error("[rate-limit] Blocking request due to Redis error (fail closed)");
+        return { success: false, remaining: 0, reset: now + RATE_LIMIT_WINDOW_MS };
+      }
       return { success: true, remaining: RATE_LIMIT_REQUESTS, reset: now };
     }
 
@@ -155,7 +184,11 @@ async function checkUpstashRateLimit(
     };
   } catch (error) {
     console.error("[rate-limit] Upstash error:", error);
-    // Fail open - allow request if Redis is down
+    // SECURITY: Fail closed in production, fail open in development
+    if (IS_PRODUCTION) {
+      console.error("[rate-limit] Blocking request due to Redis error (fail closed)");
+      return { success: false, remaining: 0, reset: now + RATE_LIMIT_WINDOW_MS };
+    }
     return { success: true, remaining: RATE_LIMIT_REQUESTS, reset: now };
   }
 }
