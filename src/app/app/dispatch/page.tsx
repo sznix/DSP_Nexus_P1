@@ -2,6 +2,9 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { todayInTimeZone, formatDateForDisplay } from "@/lib/utils";
 import AppHeader from "@/components/AppHeader";
+import AssignmentQuickActions from "@/components/AssignmentQuickActions";
+
+export const dynamic = "force-dynamic";
 
 // Allowed roles for dispatch page
 const ALLOWED_ROLES = ["admin", "manager", "dispatcher"] as const;
@@ -11,15 +14,23 @@ type DailyAssignment = {
   pad: string | null;
   dispatch_time: string | null;
   cart_location: string | null;
+
+  // Checkoff state (MVP v1)
   key_status: string | null;
+  card_status: string | null;
+  current_key_holder_id: string | null;
   verification_status: string | null;
+
   vans: {
     label: string;
   } | null;
+
   drivers: {
+    id: string;
     first_name: string;
     last_name: string;
   } | null;
+
   lot_spots: {
     label: string;
     sort_index: number;
@@ -81,12 +92,15 @@ export default async function DispatchPage() {
       pad,
       dispatch_time,
       cart_location,
+      card_status,
       key_status,
+      current_key_holder_id,
       verification_status,
       vans (
         label
       ),
       drivers (
+        id,
         first_name,
         last_name
       ),
@@ -156,7 +170,7 @@ export default async function DispatchPage() {
 
         {assignmentsError ? (
           <div className="bg-red-500/20 border border-red-500/30 rounded-xl p-6 text-red-200">
-            <p>Error loading assignments: {assignmentsError.message}</p>
+            <p>Error loading assignments. Please try again.</p>
           </div>
         ) : sortedAssignments.length === 0 ? (
           <div className="bg-white/5 backdrop-blur-lg rounded-xl border border-white/10 p-8 text-center">
@@ -316,6 +330,17 @@ export default async function DispatchPage() {
                       </span>
                     </div>
                   </div>
+
+                  <AssignmentQuickActions
+                    assignmentId={assignment.id}
+                    driverId={assignment.drivers?.id ?? null}
+                    keyStatus={assignment.key_status}
+                    cardStatus={assignment.card_status}
+                    verificationStatus={assignment.verification_status}
+                    currentKeyHolderId={assignment.current_key_holder_id}
+                    variant="card"
+                  />
+
                 </div>
               ))}
             </div>
