@@ -7,6 +7,7 @@
 
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
+import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/env";
 
 type UserContext = {
   userId: string;
@@ -25,13 +26,8 @@ type AuthError = {
  * Returns null if not authenticated.
  */
 export async function getUserContext(): Promise<UserContext | null> {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY;
-
-  if (!supabaseUrl || !supabaseAnonKey) {
-    console.error("[auth] Missing Supabase environment variables");
-    return null;
-  }
+  const supabaseUrl = getSupabaseUrl();
+  const supabaseAnonKey = getSupabaseAnonKey();
 
   const cookieStore = await cookies();
 
@@ -40,8 +36,14 @@ export async function getUserContext(): Promise<UserContext | null> {
       getAll() {
         return cookieStore.getAll();
       },
-      setAll() {
-        // API routes don't need to set cookies
+      setAll(cookiesToSet) {
+        try {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            cookieStore.set(name, value, options)
+          );
+        } catch {
+          // Some runtimes may restrict cookie mutation here; ignore.
+        }
       },
     },
   });

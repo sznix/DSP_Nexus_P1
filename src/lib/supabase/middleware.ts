@@ -1,6 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { getRequiredEnv } from "@/lib/utils";
+import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/env";
 
 /**
  * Determines if a path requires authentication check.
@@ -46,8 +46,8 @@ export async function updateSession(request: NextRequest) {
   }> = [];
 
   const supabase = createServerClient(
-    getRequiredEnv("NEXT_PUBLIC_SUPABASE_URL"),
-    getRequiredEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY"),
+    getSupabaseUrl(),
+    getSupabaseAnonKey(),
     {
       cookies: {
         getAll() {

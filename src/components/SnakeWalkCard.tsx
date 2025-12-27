@@ -2,6 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  CARD_STATUS,
+  KEY_STATUS,
+  VERIFICATION_STATUS,
+  type CardStatus,
+  type KeyStatus,
+  type VerificationStatus,
+} from "@/lib/constants";
 
 type Props = {
   assignmentId: string;
@@ -13,9 +21,9 @@ type Props = {
   pad: string | null;
   dispatchTime: string | null;
   cartLocation: string | null;
-  keyStatus: string | null;
-  cardStatus: string | null;
-  verificationStatus: string | null;
+  keyStatus: KeyStatus | null;
+  cardStatus: CardStatus | null;
+  verificationStatus: VerificationStatus | null;
   currentKeyHolderId: string | null;
 };
 
@@ -44,7 +52,7 @@ export default function SnakeWalkCard({
 
   // Retrieval barrier: key is with a driver but not the assigned driver
   const hasRetrievalBarrier =
-    keyStatus === "WITH_DRIVER" &&
+    keyStatus === KEY_STATUS.WITH_DRIVER &&
     !!driverId &&
     !!currentKeyHolderId &&
     driverId !== currentKeyHolderId;
@@ -70,11 +78,11 @@ export default function SnakeWalkCard({
   async function toggleKey() {
     setBusy("key");
     try {
-      if (keyStatus === "WITH_DRIVER") {
-        await patch({ key_status: "STATION" });
+      if (keyStatus === KEY_STATUS.WITH_DRIVER) {
+        await patch({ key_status: KEY_STATUS.STATION });
       } else {
         await patch({
-          key_status: "WITH_DRIVER",
+          key_status: KEY_STATUS.WITH_DRIVER,
           current_key_holder_id: driverId,
         });
       }
@@ -86,10 +94,10 @@ export default function SnakeWalkCard({
   async function toggleCard() {
     setBusy("card");
     try {
-      if (cardStatus === "given") {
-        await patch({ card_status: "not_given" });
+      if (cardStatus === CARD_STATUS.GIVEN) {
+        await patch({ card_status: CARD_STATUS.NOT_GIVEN });
       } else {
-        await patch({ card_status: "given" });
+        await patch({ card_status: CARD_STATUS.GIVEN });
       }
     } finally {
       setBusy(null);
@@ -99,10 +107,10 @@ export default function SnakeWalkCard({
   async function toggleVerify() {
     setBusy("verify");
     try {
-      if (verificationStatus === "verified") {
-        await patch({ verification_status: "pending" });
+      if (verificationStatus === VERIFICATION_STATUS.VERIFIED) {
+        await patch({ verification_status: VERIFICATION_STATUS.PENDING });
       } else {
-        await patch({ verification_status: "verified" });
+        await patch({ verification_status: VERIFICATION_STATUS.VERIFIED });
       }
     } finally {
       setBusy(null);
@@ -113,7 +121,7 @@ export default function SnakeWalkCard({
     setBusy("transfer");
     try {
       await patch({
-        key_status: "WITH_DRIVER",
+        key_status: KEY_STATUS.WITH_DRIVER,
         current_key_holder_id: driverId,
       });
     } finally {
@@ -125,7 +133,7 @@ export default function SnakeWalkCard({
     setBusy("return");
     try {
       await patch({
-        key_status: "STATION",
+        key_status: KEY_STATUS.STATION,
         current_key_holder_id: null,
       });
     } finally {
@@ -134,27 +142,27 @@ export default function SnakeWalkCard({
   }
 
   const keyLabel =
-    keyStatus === "WITH_DRIVER"
+    keyStatus === KEY_STATUS.WITH_DRIVER
       ? "Key: With Driver"
-      : keyStatus === "STATION"
+      : keyStatus === KEY_STATUS.STATION
       ? "Key: Station"
       : "Key: —";
 
   const cardLabel =
-    cardStatus === "given"
+    cardStatus === CARD_STATUS.GIVEN
       ? "Card: Given"
-      : cardStatus === "not_given"
+      : cardStatus === CARD_STATUS.NOT_GIVEN
       ? "Card: Not Given"
-      : cardStatus === "skipped"
+      : cardStatus === CARD_STATUS.SKIPPED
       ? "Card: Skipped"
       : "Card: —";
 
   const verifyLabel =
-    verificationStatus === "verified"
+    verificationStatus === VERIFICATION_STATUS.VERIFIED
       ? "Verified"
-      : verificationStatus === "pending"
+      : verificationStatus === VERIFICATION_STATUS.PENDING
       ? "Pending"
-      : verificationStatus === "flagged"
+      : verificationStatus === VERIFICATION_STATUS.FLAGGED
       ? "Flagged"
       : "—";
 
@@ -181,9 +189,9 @@ export default function SnakeWalkCard({
           <div
             className={classNames(
               "inline-block px-2 py-0.5 text-xs rounded-full border mt-1",
-              verificationStatus === "verified"
+              verificationStatus === VERIFICATION_STATUS.VERIFIED
                 ? "bg-green-500/20 text-green-300 border-green-500/30"
-                : verificationStatus === "flagged"
+                : verificationStatus === VERIFICATION_STATUS.FLAGGED
                 ? "bg-red-500/20 text-red-300 border-red-500/30"
                 : "bg-slate-500/20 text-slate-300 border-slate-500/30"
             )}
@@ -274,7 +282,7 @@ export default function SnakeWalkCard({
           disabled={busy !== null}
           className={classNames(
             btnBase,
-            keyStatus === "WITH_DRIVER"
+            keyStatus === KEY_STATUS.WITH_DRIVER
               ? "border-amber-500/40 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25"
               : "border-slate-600/40 bg-white/5 text-slate-200 hover:bg-white/10"
           )}
@@ -288,7 +296,7 @@ export default function SnakeWalkCard({
           disabled={busy !== null}
           className={classNames(
             btnBase,
-            cardStatus === "given"
+            cardStatus === CARD_STATUS.GIVEN
               ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25"
               : "border-slate-600/40 bg-white/5 text-slate-200 hover:bg-white/10"
           )}
@@ -302,7 +310,7 @@ export default function SnakeWalkCard({
           disabled={busy !== null}
           className={classNames(
             btnBase,
-            verificationStatus === "verified"
+            verificationStatus === VERIFICATION_STATUS.VERIFIED
               ? "border-sky-500/40 bg-sky-500/15 text-sky-200 hover:bg-sky-500/25"
               : "border-slate-600/40 bg-white/5 text-slate-200 hover:bg-white/10"
           )}

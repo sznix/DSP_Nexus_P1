@@ -1,45 +1,9 @@
-import { createClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
-
-// Allowed roles for mechanic page (mechanic-only by default)
-const ALLOWED_ROLES = ["mechanic"] as const;
-
-type TenantMemberData = {
-  role: string;
-  tenant: { name: string } | null;
-};
+import { requirePageRole } from "@/lib/page-auth";
+import { MECHANIC_ALLOWED_ROLES } from "@/lib/constants";
 
 export default async function MechanicPage() {
-  const supabase = await createClient();
-
-  const { data: claimsData, error: claimsError } =
-    await supabase.auth.getClaims();
-
-  if (claimsError || !claimsData) {
-    redirect("/login");
-  }
-
-  const userId = claimsData.claims.sub;
-
-  // Get tenant info using alias syntax for proper typing
-  const { data: memberData, error: memberError } = await supabase
-    .from("tenant_members")
-    .select("role, tenant:tenants(name)")
-    .eq("user_id", userId)
-    .single<TenantMemberData>();
-
-  if (memberError || !memberData) {
-    redirect("/app");
-  }
-
-  const role = memberData.role;
-  const tenantName = memberData.tenant?.name ?? "Unknown Tenant";
-
-  // Role-based access control: Only mechanic role can access this page
-  if (!ALLOWED_ROLES.includes(role as (typeof ALLOWED_ROLES)[number])) {
-    redirect("/app");
-  }
+  const { tenantName } = await requirePageRole(MECHANIC_ALLOWED_ROLES);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800">
@@ -99,3 +63,4 @@ export default async function MechanicPage() {
     </div>
   );
 }
+

@@ -2,13 +2,21 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  CARD_STATUS,
+  KEY_STATUS,
+  VERIFICATION_STATUS,
+  type CardStatus,
+  type KeyStatus,
+  type VerificationStatus,
+} from "@/lib/constants";
 
 type Props = {
   assignmentId: string;
   driverId: string | null;
-  keyStatus: string | null;
-  cardStatus: string | null;
-  verificationStatus: string | null;
+  keyStatus: KeyStatus | null;
+  cardStatus: CardStatus | null;
+  verificationStatus: VerificationStatus | null;
   currentKeyHolderId: string | null;
   variant?: "table" | "card";
 };
@@ -31,27 +39,27 @@ export default function AssignmentQuickActions({
   const [error, setError] = useState<string | null>(null);
 
   const keyLabel = useMemo(() => {
-    if (keyStatus === "WITH_DRIVER") return "Key: With Driver";
-    if (keyStatus === "STATION") return "Key: Station";
+    if (keyStatus === KEY_STATUS.WITH_DRIVER) return "Key: With Driver";
+    if (keyStatus === KEY_STATUS.STATION) return "Key: Station";
     return "Key: —";
   }, [keyStatus]);
 
   const cardLabel = useMemo(() => {
-    if (cardStatus === "given") return "Card: Given";
-    if (cardStatus === "not_given") return "Card: Not Given";
-    if (cardStatus === "skipped") return "Card: Skipped";
+    if (cardStatus === CARD_STATUS.GIVEN) return "Card: Given";
+    if (cardStatus === CARD_STATUS.NOT_GIVEN) return "Card: Not Given";
+    if (cardStatus === CARD_STATUS.SKIPPED) return "Card: Skipped";
     return "Card: —";
   }, [cardStatus]);
 
   const verifyLabel = useMemo(() => {
-    if (verificationStatus === "verified") return "Verify: Verified";
-    if (verificationStatus === "pending") return "Verify: Pending";
-    if (verificationStatus === "flagged") return "Verify: Flagged";
+    if (verificationStatus === VERIFICATION_STATUS.VERIFIED) return "Verify: Verified";
+    if (verificationStatus === VERIFICATION_STATUS.PENDING) return "Verify: Pending";
+    if (verificationStatus === VERIFICATION_STATUS.FLAGGED) return "Verify: Flagged";
     return "Verify: —";
   }, [verificationStatus]);
 
   const retrievalBarrier =
-    keyStatus === "WITH_DRIVER" &&
+    keyStatus === KEY_STATUS.WITH_DRIVER &&
     !!driverId &&
     !!currentKeyHolderId &&
     driverId !== currentKeyHolderId;
@@ -77,11 +85,11 @@ export default function AssignmentQuickActions({
   async function toggleKey() {
     setBusy("key");
     try {
-      if (keyStatus === "WITH_DRIVER") {
-        await patch({ key_status: "STATION" });
+      if (keyStatus === KEY_STATUS.WITH_DRIVER) {
+        await patch({ key_status: KEY_STATUS.STATION });
       } else {
         await patch({
-          key_status: "WITH_DRIVER",
+          key_status: KEY_STATUS.WITH_DRIVER,
           // Default to assigned driver as holder (server will also enforce)
           current_key_holder_id: driverId,
         });
@@ -94,10 +102,10 @@ export default function AssignmentQuickActions({
   async function toggleCard() {
     setBusy("card");
     try {
-      if (cardStatus === "given") {
-        await patch({ card_status: "not_given" });
+      if (cardStatus === CARD_STATUS.GIVEN) {
+        await patch({ card_status: CARD_STATUS.NOT_GIVEN });
       } else {
-        await patch({ card_status: "given" });
+        await patch({ card_status: CARD_STATUS.GIVEN });
       }
     } finally {
       setBusy(null);
@@ -107,10 +115,10 @@ export default function AssignmentQuickActions({
   async function toggleVerify() {
     setBusy("verify");
     try {
-      if (verificationStatus === "verified") {
-        await patch({ verification_status: "pending" });
+      if (verificationStatus === VERIFICATION_STATUS.VERIFIED) {
+        await patch({ verification_status: VERIFICATION_STATUS.PENDING });
       } else {
-        await patch({ verification_status: "verified" });
+        await patch({ verification_status: VERIFICATION_STATUS.VERIFIED });
       }
     } finally {
       setBusy(null);
@@ -140,7 +148,7 @@ export default function AssignmentQuickActions({
         disabled={busy !== null}
         className={classNames(
           btnBase,
-          keyStatus === "WITH_DRIVER"
+          keyStatus === KEY_STATUS.WITH_DRIVER
             ? "border-amber-500/40 bg-amber-500/15 text-amber-200 hover:bg-amber-500/20"
             : "border-slate-600/40 bg-white/5 text-slate-200 hover:bg-white/10"
         )}
@@ -156,7 +164,7 @@ export default function AssignmentQuickActions({
         disabled={busy !== null}
         className={classNames(
           btnBase,
-          cardStatus === "given"
+          cardStatus === CARD_STATUS.GIVEN
             ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/20"
             : "border-slate-600/40 bg-white/5 text-slate-200 hover:bg-white/10"
         )}
@@ -172,7 +180,7 @@ export default function AssignmentQuickActions({
         disabled={busy !== null}
         className={classNames(
           btnBase,
-          verificationStatus === "verified"
+          verificationStatus === VERIFICATION_STATUS.VERIFIED
             ? "border-sky-500/40 bg-sky-500/15 text-sky-200 hover:bg-sky-500/20"
             : "border-slate-600/40 bg-white/5 text-slate-200 hover:bg-white/10"
         )}

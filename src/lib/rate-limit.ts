@@ -142,7 +142,7 @@ async function checkUpstashRateLimit(
     // 3. Count requests in window
     const pipeline = [
       ["ZREMRANGEBYSCORE", key, "0", String(windowStart)],
-      ["ZADD", key, String(now), `${now}-${Math.random()}`],
+      ["ZADD", key, String(now), `${now}-${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)}`],
       ["ZCARD", key],
       ["PEXPIRE", key, String(RATE_LIMIT_WINDOW_MS)],
     ];
@@ -198,6 +198,12 @@ async function checkUpstashRateLimit(
  * Handles X-Forwarded-For header (takes first IP) and fallbacks.
  */
 export function getClientIp(request: Request): string {
+  const vercelForwardedFor = request.headers.get("x-vercel-forwarded-for");
+  if (vercelForwardedFor) {
+    const firstIp = vercelForwardedFor.split(",")[0].trim();
+    if (firstIp) return firstIp;
+  }
+
   const forwardedFor = request.headers.get("x-forwarded-for");
   if (forwardedFor) {
     // X-Forwarded-For can contain multiple IPs: client, proxy1, proxy2
