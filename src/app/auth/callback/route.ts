@@ -26,3 +26,4 @@ export async function GET(request: Request) {
   errorUrl.searchParams.set("error", "auth_callback_error");
   return NextResponse.redirect(errorUrl);
 }
+
