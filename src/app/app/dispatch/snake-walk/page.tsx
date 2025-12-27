@@ -1,9 +1,8 @@
-import { createClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
 import { todayInTimeZone, formatDateForDisplay } from "@/lib/utils";
 import AppHeader from "@/components/AppHeader";
 import SnakeWalkCard from "@/components/SnakeWalkCard";
-import { DISPATCH_ALLOWED_ROLES, Role } from "@/lib/constants";
+import { requirePageRole } from "@/lib/page-auth";
+import { DISPATCH_ALLOWED_ROLES, type CardStatus, type KeyStatus, type VerificationStatus } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -14,10 +13,10 @@ type DailyAssignment = {
   cart_location: string | null;
 
   // Checkoff state
-  key_status: string | null;
-  card_status: string | null;
+  key_status: KeyStatus | null;
+  card_status: CardStatus | null;
   current_key_holder_id: string | null;
-  verification_status: string | null;
+  verification_status: VerificationStatus | null;
 
   vans: {
     label: string;
@@ -44,46 +43,10 @@ type TenantMemberData = {
   role: string;
   tenant: { name: string } | null;
 };
-
 export default async function SnakeWalkPage() {
-  const supabase = await createClient();
-
-  const { data: claimsData, error: claimsError } =
-    await supabase.auth.getClaims();
-
-  if (claimsError || !claimsData) {
-    redirect("/login");
-  }
-
-  const userId = claimsData.claims.sub;
-
-  // Get tenant_id and role from tenant_members
-  const { data: memberData, error: memberError } = await supabase
-    .from("tenant_members")
-    .select("tenant_id, role, tenant:tenants(name)")
-    .eq("user_id", userId)
-    .single<TenantMemberData>();
-
-  if (memberError || !memberData) {
-    console.error("[snake-walk] Failed to fetch tenant member data", {
-      userId,
-      error: memberError,
-    });
-    redirect("/app");
-  }
-
-  // Server-side role enforcement: admin/manager/dispatcher only
-  const role = memberData.role as Role;
-  if (!DISPATCH_ALLOWED_ROLES.includes(role)) {
-    console.warn("[snake-walk] Unauthorized role access attempt", {
-      userId,
-      role,
-    });
-    redirect("/app");
-  }
-
-  const tenantId = memberData.tenant_id;
-  const tenantName = memberData.tenant?.name ?? "Unknown Tenant";
+  const { supabase, tenantId, tenantName } = await requirePageRole(
+    DISPATCH_ALLOWED_ROLES
+  );
 
   // Use timezone-aware date for consistent querying
   const today = todayInTimeZone();

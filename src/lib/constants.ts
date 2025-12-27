@@ -66,6 +66,35 @@ export function getDisallowedColumns(
 }
 
 /**
+ * Status constants used across UI + API.
+ * Keeping these centralized reduces typos and hard-coded strings.
+ */
+export const KEY_STATUS = {
+  STATION: "STATION",
+  WITH_DRIVER: "WITH_DRIVER",
+} as const;
+
+export type KeyStatus = (typeof KEY_STATUS)[keyof typeof KEY_STATUS];
+
+export const CARD_STATUS = {
+  GIVEN: "given",
+  NOT_GIVEN: "not_given",
+  SKIPPED: "skipped",
+} as const;
+
+export type CardStatus = (typeof CARD_STATUS)[keyof typeof CARD_STATUS];
+
+export const VERIFICATION_STATUS = {
+  VERIFIED: "verified",
+  PENDING: "pending",
+  FLAGGED: "flagged",
+} as const;
+
+export type VerificationStatus =
+  (typeof VERIFICATION_STATUS)[keyof typeof VERIFICATION_STATUS];
+
+
+/**
  * Role definitions for the application.
  */
 export const ROLES = {
@@ -76,6 +105,17 @@ export const ROLES = {
 } as const;
 
 export type Role = (typeof ROLES)[keyof typeof ROLES];
+
+/**
+ * Roles allowed to access the admin pages (Admin Panel, Import Airlock).
+ */
+export const ADMIN_ALLOWED_ROLES: Role[] = [ROLES.ADMIN, ROLES.MANAGER];
+
+/**
+ * Roles allowed to access mechanic-only views.
+ */
+export const MECHANIC_ALLOWED_ROLES: Role[] = [ROLES.MECHANIC];
+
 
 /**
  * Roles allowed to access the dispatch/Snake Walk view.
