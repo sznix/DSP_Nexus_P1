@@ -16,11 +16,11 @@ import {
  */
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await requireRole(["admin", "manager", "dispatcher"]);
-    const assignmentId = params.id;
+    const { id: assignmentId } = await params;
 
     if (!assignmentId) {
       return NextResponse.json(
@@ -34,7 +34,7 @@ export async function PATCH(
     // Accept either { patch: {...} } or just {...}
     const patchCandidate =
       body && typeof body === "object" && !Array.isArray(body) && "patch" in body
-        ? (body as any).patch
+        ? (body as { patch: unknown }).patch
         : body;
 
     if (
