@@ -1,13 +1,11 @@
-import { createClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
 import { todayInTimeZone, formatDateForDisplay } from "@/lib/utils";
 import AppHeader from "@/components/AppHeader";
 import AssignmentQuickActions from "@/components/AssignmentQuickActions";
+import { requirePageRole } from "@/lib/page-auth";
+import { DISPATCH_ALLOWED_ROLES, type CardStatus, type KeyStatus, type VerificationStatus } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 
-// Allowed roles for dispatch page
-const ALLOWED_ROLES = ["admin", "manager", "dispatcher"] as const;
 
 type DailyAssignment = {
   id: string;
@@ -16,10 +14,10 @@ type DailyAssignment = {
   cart_location: string | null;
 
   // Checkoff state (MVP v1)
-  key_status: string | null;
-  card_status: string | null;
+  key_status: KeyStatus | null;
+  card_status: CardStatus | null;
   current_key_holder_id: string | null;
-  verification_status: string | null;
+  verification_status: VerificationStatus | null;
 
   vans: {
     label: string;
@@ -41,43 +39,10 @@ type DailyAssignment = {
   } | null;
 };
 
-type TenantMemberData = {
-  tenant_id: string;
-  role: string;
-  tenant: { name: string } | null;
-};
-
 export default async function DispatchPage() {
-  const supabase = await createClient();
-
-  const { data: claimsData, error: claimsError } =
-    await supabase.auth.getClaims();
-
-  if (claimsError || !claimsData) {
-    redirect("/login");
-  }
-
-  const userId = claimsData.claims.sub;
-
-  // Get tenant_id and role from tenant_members using alias syntax for proper typing
-  const { data: memberData, error: memberError } = await supabase
-    .from("tenant_members")
-    .select("tenant_id, role, tenant:tenants(name)")
-    .eq("user_id", userId)
-    .single<TenantMemberData>();
-
-  if (memberError || !memberData) {
-    redirect("/app");
-  }
-
-  // Role-based access control
-  const role = memberData.role;
-  if (!ALLOWED_ROLES.includes(role as (typeof ALLOWED_ROLES)[number])) {
-    redirect("/app");
-  }
-
-  const tenantId = memberData.tenant_id;
-  const tenantName = memberData.tenant?.name ?? "Unknown Tenant";
+  const { supabase, tenantId, tenantName } = await requirePageRole(
+    DISPATCH_ALLOWED_ROLES
+  );
 
   // Use timezone-aware date for consistent querying (uses NEXT_PUBLIC_DEFAULT_TIMEZONE)
   const today = todayInTimeZone();

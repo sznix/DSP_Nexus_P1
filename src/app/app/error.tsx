@@ -16,3 +16,4 @@ export default function AppError({
 
   return <ErrorDisplay errorId={error.digest} onRetry={reset} />;
 }
+

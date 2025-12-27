@@ -3,6 +3,8 @@ import { requireRole } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import {
   DISPATCHER_PATCHABLE_COLUMNS,
+  KEY_STATUS,
+  VERIFICATION_STATUS,
   getDisallowedColumns,
   isValidDispatcherPatch,
 } from "@/lib/constants";
@@ -16,11 +18,11 @@ import {
  */
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await requireRole(["admin", "manager", "dispatcher"]);
-    const assignmentId = params.id;
+    const { id: assignmentId } = await params;
 
     if (!assignmentId) {
       return NextResponse.json(
@@ -31,24 +33,31 @@ export async function PATCH(
 
     const body = await request.json().catch(() => null);
 
-    // Accept either { patch: {...} } or just {...}
-    const patchCandidate =
-      body && typeof body === "object" && !Array.isArray(body) && "patch" in body
-        ? (body as any).patch
-        : body;
-
-    if (
-      !patchCandidate ||
-      typeof patchCandidate !== "object" ||
-      Array.isArray(patchCandidate)
-    ) {
+    // Runtime guard: body must be a plain object
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
       return NextResponse.json(
         { error: "Invalid JSON body. Expected an object." },
         { status: 400 }
       );
     }
 
-    const patch: Record<string, unknown> = patchCandidate;
+    // Accept either { patch: {...} } or just {...}
+    const bodyObj = body as Record<string, unknown>;
+    const patchCandidate = "patch" in bodyObj ? bodyObj.patch : bodyObj;
+
+    // Runtime guard: patch must be a plain object
+    if (
+      !patchCandidate ||
+      typeof patchCandidate !== "object" ||
+      Array.isArray(patchCandidate)
+    ) {
+      return NextResponse.json(
+        { error: "Invalid patch. Expected a plain object." },
+        { status: 400 }
+      );
+    }
+
+    const patch: Record<string, unknown> = patchCandidate as Record<string, unknown>;
 
     const keys = Object.keys(patch);
     if (keys.length === 0) {
@@ -86,7 +95,7 @@ export async function PATCH(
     const nowIso = new Date().toISOString();
 
     // Verification: if a dispatcher marks verified, stamp who/when
-    if (patch.verification_status === "verified") {
+    if (patch.verification_status === VERIFICATION_STATUS.VERIFIED) {
       if (!("verification_timestamp" in patch)) {
         patch.verification_timestamp = nowIso;
       }
@@ -106,12 +115,12 @@ export async function PATCH(
     }
 
     // Keys: enforce sane pairing of key_status + current_key_holder_id
-    if (patch.key_status === "STATION") {
+    if (patch.key_status === KEY_STATUS.STATION) {
       // Returning keys clears current holder
       patch.current_key_holder_id = null;
     }
 
-    if (patch.key_status === "WITH_DRIVER") {
+    if (patch.key_status === KEY_STATUS.WITH_DRIVER) {
       // If client didn't specify a holder, default to the assigned driver_id (if any)
       if (!("current_key_holder_id" in patch) || patch.current_key_holder_id == null) {
         const { data: row, error: rowError } = await supabase
