@@ -31,24 +31,31 @@ export async function PATCH(
 
     const body = await request.json().catch(() => null);
 
-    // Accept either { patch: {...} } or just {...}
-    const patchCandidate =
-      body && typeof body === "object" && !Array.isArray(body) && "patch" in body
-        ? (body as any).patch
-        : body;
-
-    if (
-      !patchCandidate ||
-      typeof patchCandidate !== "object" ||
-      Array.isArray(patchCandidate)
-    ) {
+    // Runtime guard: body must be a plain object
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
       return NextResponse.json(
         { error: "Invalid JSON body. Expected an object." },
         { status: 400 }
       );
     }
 
-    const patch: Record<string, unknown> = patchCandidate;
+    // Accept either { patch: {...} } or just {...}
+    const bodyObj = body as Record<string, unknown>;
+    const patchCandidate = "patch" in bodyObj ? bodyObj.patch : bodyObj;
+
+    // Runtime guard: patch must be a plain object
+    if (
+      !patchCandidate ||
+      typeof patchCandidate !== "object" ||
+      Array.isArray(patchCandidate)
+    ) {
+      return NextResponse.json(
+        { error: "Invalid patch. Expected a plain object." },
+        { status: 400 }
+      );
+    }
+
+    const patch: Record<string, unknown> = patchCandidate as Record<string, unknown>;
 
     const keys = Object.keys(patch);
     if (keys.length === 0) {

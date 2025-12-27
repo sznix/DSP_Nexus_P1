@@ -16,3 +16,4 @@ export default function GlobalError({
 
   return <ErrorDisplay errorId={error.digest} onRetry={reset} />;
 }
+
