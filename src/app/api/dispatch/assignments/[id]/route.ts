@@ -16,11 +16,11 @@ import {
  */
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await requireRole(["admin", "manager", "dispatcher"]);
-    const assignmentId = params.id;
+    const { id: assignmentId } = await params;
 
     if (!assignmentId) {
       return NextResponse.json(
