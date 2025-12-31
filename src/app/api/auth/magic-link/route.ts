@@ -107,11 +107,9 @@ export async function POST(request: Request) {
     const safeRedirect = safeNextPath(redirectToStr);
 
     // Construct the full redirect URL for the auth callback
-    // SECURITY: Use NEXT_PUBLIC_SITE_URL instead of trusting request origin header
+    // SECURITY: Use SITE_URL instead of trusting request origin header
     // The origin header can be spoofed by attackers to redirect magic links to malicious sites
     const siteUrl = getSiteUrl();
-      );
-    }
     const emailRedirectTo = `${siteUrl}/auth/callback?next=${encodeURIComponent(safeRedirect)}`;
 
     // Send magic link via Supabase

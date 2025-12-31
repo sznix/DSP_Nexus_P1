@@ -38,11 +38,6 @@ type DailyAssignment = {
   } | null;
 };
 
-type TenantMemberData = {
-  tenant_id: string;
-  role: string;
-  tenant: { name: string } | null;
-};
 export default async function SnakeWalkPage() {
   const { supabase, tenantId, tenantName } = await requirePageRole(
     DISPATCH_ALLOWED_ROLES

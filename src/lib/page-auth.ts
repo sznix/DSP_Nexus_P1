@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import type { Role } from "@/lib/constants";
 
-type TenantMemberRow = {
+type TenantMemberResult = {
   tenant_id: string;
   role: string;
   tenant: { name: string } | null;
@@ -32,19 +32,22 @@ export async function getTenantMemberOrRedirect(): Promise<PageAuthContext> {
 
   const userId = claimsData.claims.sub;
 
-  const { data: memberData, error: memberError } = await supabase
+  const { data, error: memberError } = await supabase
     .from("tenant_members")
     .select("tenant_id, role, tenant:tenants(name)")
     .eq("user_id", userId)
     .single();
 
-  if (memberError || !memberData) {
+  if (memberError || !data) {
     console.error("[page-auth] Failed to fetch tenant membership", {
       userId,
       error: memberError,
     });
     redirect("/app");
   }
+
+  // Cast to expected shape - Supabase join returns tenant as object, not array
+  const memberData = data as unknown as TenantMemberResult;
 
   return {
     supabase,
