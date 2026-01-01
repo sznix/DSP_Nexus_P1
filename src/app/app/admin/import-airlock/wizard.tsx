@@ -461,6 +461,28 @@ export default function ImportAirlockWizard() {
 // Step Components
 // ============================================================================
 
+type SourceMode = "upload" | "paste" | "manual";
+
+const MANUAL_HEADERS = [
+  "driver_name",
+  "van_label",
+  "route_code",
+  "pad",
+  "dispatch_time",
+  "cart_location",
+  "parking_spot_label",
+];
+
+const MANUAL_FIELD_LABELS: Record<string, string> = {
+  driver_name: "Driver",
+  van_label: "Van",
+  route_code: "Route",
+  pad: "Pad",
+  dispatch_time: "Time",
+  cart_location: "Cart",
+  parking_spot_label: "Spot",
+};
+
 function SourceStep({
   batch,
   setBatch,
@@ -479,6 +501,59 @@ function SourceStep({
   onNext: () => void;
 }) {
   const [pasteText, setPasteText] = useState("");
+  const [sourceMode, setSourceMode] = useState<SourceMode>("upload");
+  const [manualRows, setManualRows] = useState<Record<string, string>[]>([
+    createEmptyManualRow(),
+  ]);
+
+  function createEmptyManualRow(): Record<string, string> {
+    const row: Record<string, string> = {};
+    for (const h of MANUAL_HEADERS) {
+      row[h] = "";
+    }
+    return row;
+  }
+
+  function updateManualRow(idx: number, field: string, value: string) {
+    setManualRows((prev) =>
+      prev.map((row, i) => (i === idx ? { ...row, [field]: value } : row))
+    );
+  }
+
+  function addManualRow() {
+    setManualRows((prev) => [...prev, createEmptyManualRow()]);
+  }
+
+  function removeManualRow(idx: number) {
+    setManualRows((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  function applyManualRows() {
+    // Filter out completely empty rows
+    const validRows = manualRows.filter((row) =>
+      Object.values(row).some((v) => v.trim() !== "")
+    );
+
+    if (validRows.length === 0) {
+      return;
+    }
+
+    // Auto-generate mappings (direct mapping since headers match normalized fields)
+    const mappings: ColumnMapping[] = MANUAL_HEADERS.map((h) => ({
+      sourceHeader: h,
+      targetField: h as NormalizedField,
+      ignored: false,
+    }));
+
+    setBatch((prev) => ({
+      ...prev,
+      sourceType: "manual",
+      sourceFilename: null,
+      rawHeaders: MANUAL_HEADERS,
+      rawData: validRows,
+      columnMappings: mappings,
+    }));
+  }
 
   return (
     <div className="space-y-6">
@@ -487,7 +562,7 @@ function SourceStep({
           Step 1: Select Data Source
         </h2>
         <p className="text-slate-400">
-          Upload a file or paste data from your clipboard.
+          Upload a file, paste data, or enter rows manually.
         </p>
       </div>
 
@@ -506,62 +581,169 @@ function SourceStep({
         />
       </div>
 
-      {/* File upload */}
-      <div className="border-2 border-dashed border-slate-600 rounded-lg p-8 text-center">
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".xlsx,.xls,.csv"
-          onChange={onFileUpload}
-          className="hidden"
-          id="file-upload"
-        />
-        <label
-          htmlFor="file-upload"
-          className="cursor-pointer inline-flex items-center px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition"
-        >
-          <svg
-            className="w-5 h-5 mr-2"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+      {/* Source mode tabs */}
+      <div className="flex border-b border-slate-700">
+        {(["upload", "paste", "manual"] as SourceMode[]).map((mode) => (
+          <button
+            key={mode}
+            onClick={() => setSourceMode(mode)}
+            className={`px-4 py-2 text-sm font-medium transition ${
+              sourceMode === mode
+                ? "text-purple-400 border-b-2 border-purple-400"
+                : "text-slate-400 hover:text-slate-300"
+            }`}
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-            />
-          </svg>
-          Upload File (.xlsx, .csv)
-        </label>
-        <p className="text-slate-500 mt-2 text-sm">
-          or drag and drop a file here
-        </p>
+            {mode === "upload" && "File Upload"}
+            {mode === "paste" && "Clipboard"}
+            {mode === "manual" && "Manual Entry"}
+          </button>
+        ))}
       </div>
 
-      {/* Clipboard paste */}
-      <div>
-        <label className="block text-sm font-medium text-slate-300 mb-2">
-          Or paste from clipboard (TSV/CSV)
-        </label>
-        <textarea
-          value={pasteText}
-          onChange={(e) => setPasteText(e.target.value)}
-          placeholder="Paste data here..."
-          rows={5}
-          className="w-full bg-slate-800 border border-slate-600 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
-        />
-        {pasteText && (
-          <button
-            onClick={() => onPaste(pasteText)}
-            disabled={loading}
-            className="mt-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition disabled:opacity-50"
+      {/* File upload */}
+      {sourceMode === "upload" && (
+        <div className="border-2 border-dashed border-slate-600 rounded-lg p-8 text-center">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            onChange={onFileUpload}
+            className="hidden"
+            id="file-upload"
+          />
+          <label
+            htmlFor="file-upload"
+            className="cursor-pointer inline-flex items-center px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition"
           >
-            Parse Pasted Data
-          </button>
-        )}
-      </div>
+            <svg
+              className="w-5 h-5 mr-2"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+              />
+            </svg>
+            Upload File (.xlsx, .csv)
+          </label>
+          <p className="text-slate-500 mt-2 text-sm">
+            or drag and drop a file here
+          </p>
+        </div>
+      )}
+
+      {/* Clipboard paste */}
+      {sourceMode === "paste" && (
+        <div>
+          <label className="block text-sm font-medium text-slate-300 mb-2">
+            Paste from clipboard (TSV/CSV)
+          </label>
+          <textarea
+            value={pasteText}
+            onChange={(e) => setPasteText(e.target.value)}
+            placeholder="Paste data here..."
+            rows={5}
+            className="w-full bg-slate-800 border border-slate-600 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
+          />
+          {pasteText && (
+            <button
+              onClick={() => onPaste(pasteText)}
+              disabled={loading}
+              className="mt-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition disabled:opacity-50"
+            >
+              Parse Pasted Data
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Manual entry */}
+      {sourceMode === "manual" && (
+        <div className="space-y-4">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-700">
+                  <th className="text-left text-slate-400 px-2 py-2 w-8">#</th>
+                  {MANUAL_HEADERS.map((h) => (
+                    <th key={h} className="text-left text-slate-400 px-2 py-2">
+                      {MANUAL_FIELD_LABELS[h]}
+                    </th>
+                  ))}
+                  <th className="w-10"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {manualRows.map((row, idx) => (
+                  <tr key={idx} className="border-b border-slate-700/50">
+                    <td className="text-slate-500 px-2 py-1">{idx + 1}</td>
+                    {MANUAL_HEADERS.map((h) => (
+                      <td key={h} className="px-1 py-1">
+                        <input
+                          type="text"
+                          value={row[h] || ""}
+                          onChange={(e) =>
+                            updateManualRow(idx, h, e.target.value)
+                          }
+                          className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1 text-white text-sm focus:outline-none focus:ring-1 focus:ring-purple-500"
+                          placeholder={MANUAL_FIELD_LABELS[h]}
+                        />
+                      </td>
+                    ))}
+                    <td className="px-1 py-1">
+                      {manualRows.length > 1 && (
+                        <button
+                          onClick={() => removeManualRow(idx)}
+                          className="text-red-400 hover:text-red-300 p-1"
+                          title="Remove row"
+                        >
+                          <svg
+                            className="w-4 h-4"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M6 18L18 6M6 6l12 12"
+                            />
+                          </svg>
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={addManualRow}
+              className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition text-sm"
+            >
+              + Add Row
+            </button>
+            <button
+              onClick={applyManualRows}
+              disabled={
+                loading ||
+                manualRows.every((row) =>
+                  Object.values(row).every((v) => !v.trim())
+                )
+              }
+              className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg transition text-sm"
+            >
+              Apply Manual Data
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Preview */}
       {batch.rawData.length > 0 && (

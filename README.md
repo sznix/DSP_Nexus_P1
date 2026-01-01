@@ -75,8 +75,13 @@ npm start
 ```
 src/
 ├── app/
-│   ├── app/                    # Protected app routes
+│   ├── api/
+│   │   ├── auth/              # Auth API routes
+│   │   ├── dispatch/          # Dispatch API routes
+│   │   └── import-airlock/    # Import Airlock API (create, map, diff, publish)
+│   ├── app/                   # Protected app routes
 │   │   ├── admin/             # Admin panel (admin, manager only)
+│   │   │   └── import-airlock/ # Import wizard (upload → map → diff → publish)
 │   │   ├── dispatch/          # Snake Walk dispatch view (admin, manager, dispatcher)
 │   │   ├── mechanic/          # Mechanic view (mechanic only)
 │   │   ├── error.tsx          # Error boundary for /app routes
@@ -93,6 +98,7 @@ src/
 │   ├── AppHeader.tsx          # Shared header component
 │   └── ErrorDisplay.tsx       # Shared error display component
 ├── lib/
+│   ├── import-airlock/        # Import Airlock utilities (parsers, name resolution, types)
 │   ├── utils.ts               # Utility functions (env helpers, date helpers, path validation)
 │   └── supabase/
 │       ├── client.ts          # Browser client (createBrowserClient)
@@ -152,7 +158,7 @@ Date queries use timezone-aware helpers to ensure the displayed date matches the
 ## Roadmap
 
 - [x] Phase 1: Authentication & App Shell
-- [ ] Phase 2: Import Airlock (Admin data import)
+- [x] Phase 2: Import Airlock (Admin data import)
 - [ ] Phase 3: Real-time Dispatch Updates
 - [ ] Phase 4: Mechanic Issue Tracking
 - [ ] Phase 5: Mobile PWA Optimization
