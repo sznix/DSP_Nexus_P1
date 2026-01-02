@@ -52,10 +52,8 @@ export async function pullChanges(
 
     const data: PullResponse = await response.json();
 
-    // Upsert assignments into local database
-    for (const assignment of data.assignments) {
-      await upsertAssignment(db, assignment);
-    }
+    // Upsert assignments into local database in parallel for better performance
+    await Promise.all(data.assignments.map((assignment) => upsertAssignment(db, assignment)));
 
     totalSynced += data.assignments.length;
     currentCheckpoint = data.checkpoint;
@@ -122,10 +120,8 @@ export async function pushMutations(
     return { pushed: 0, failed: 0 };
   }
 
-  // Mark as in-flight
-  for (const mutation of pendingMutations) {
-    await mutation.patch({ status: "in_flight" });
-  }
+  // Mark as in-flight in parallel for better performance
+  await Promise.all(pendingMutations.map((mutation) => mutation.patch({ status: "in_flight" })));
 
   // Build push request
   const mutations: PushMutation[] = pendingMutations.map((m) => ({
@@ -146,13 +142,13 @@ export async function pushMutations(
     });
 
     if (!response.ok) {
-      // Network or auth error, revert to pending for retry
-      for (const mutation of pendingMutations) {
-        await mutation.patch({
+      // Network or auth error, revert to pending for retry in parallel
+      await Promise.all(pendingMutations.map((mutation) =>
+        mutation.patch({
           status: "pending",
           retry_count: mutation.retry_count + 1,
-        });
-      }
+        })
+      ));
       throw new Error(`Push failed: ${response.status}`);
     }
 
@@ -161,53 +157,72 @@ export async function pushMutations(
     let pushed = 0;
     let failed = 0;
 
-    // Process results
+    // Build mutation lookup map for O(1) access instead of O(n) find() calls
+    const mutationMap = new Map(pendingMutations.map((m) => [m.id, m]));
+
+    // Process results - collect promises for parallel execution
+    const resultPromises: Promise<void>[] = [];
+
     for (const result of data.results) {
-      const mutation = pendingMutations.find((m) => m.id === result.mutation_id);
+      const mutation = mutationMap.get(result.mutation_id);
       if (!mutation) continue;
 
       if (result.status === "accepted") {
         // Remove from queue and clear pending flag on assignment
-        await mutation.remove();
-        const assignment = await db.assignments.findOne(mutation.assignment_id).exec();
-        if (assignment) {
-          await assignment.patch({ _pending_sync: false });
-        }
+        resultPromises.push(
+          (async () => {
+            await mutation.remove();
+            const assignment = await db.assignments.findOne(mutation.assignment_id).exec();
+            if (assignment) {
+              await assignment.patch({ _pending_sync: false });
+            }
+          })()
+        );
         pushed++;
       } else if (result.status === "conflict") {
         // Update local with server state, remove mutation
-        if (result.server_doc) {
-          await upsertAssignment(db, result.server_doc);
-        }
-        await mutation.remove();
+        resultPromises.push(
+          (async () => {
+            if (result.server_doc) {
+              await upsertAssignment(db, result.server_doc);
+            }
+            await mutation.remove();
+          })()
+        );
         failed++;
       } else {
         // Rejected - mark as failed
-        await mutation.patch({
-          status: "failed",
-          error: result.error ?? "Unknown error",
-          retry_count: mutation.retry_count + 1,
-        });
+        resultPromises.push(
+          (async () => {
+            await mutation.patch({
+              status: "failed",
+              error: result.error ?? "Unknown error",
+              retry_count: mutation.retry_count + 1,
+            });
+          })()
+        );
         failed++;
       }
     }
 
+    await Promise.all(resultPromises);
+
     return { pushed, failed };
   } catch (error) {
-    // Revert to pending on network error
-    for (const mutation of pendingMutations) {
+    // Revert to pending on network error in parallel
+    await Promise.all(pendingMutations.map((mutation) => {
       if (mutation.retry_count < MAX_RETRIES) {
-        await mutation.patch({
+        return mutation.patch({
           status: "pending",
           retry_count: mutation.retry_count + 1,
         });
       } else {
-        await mutation.patch({
+        return mutation.patch({
           status: "failed",
           error: error instanceof Error ? error.message : "Max retries exceeded",
         });
       }
-    }
+    }));
     throw error;
   }
 }
@@ -256,9 +271,10 @@ export async function clearFailedMutations(db: SyncDatabase): Promise<number> {
     .find({ selector: { status: "failed" } })
     .exec();
 
-  for (const mutation of failed) {
-    await mutation.patch({ status: "pending", retry_count: 0, error: null });
-  }
+  // Patch all failed mutations in parallel for better performance
+  await Promise.all(
+    failed.map((mutation) => mutation.patch({ status: "pending", retry_count: 0, error: null }))
+  );
 
   return failed.length;
 }

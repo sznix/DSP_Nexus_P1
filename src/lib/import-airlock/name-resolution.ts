@@ -103,32 +103,44 @@ export function levenshteinDistance(a: string, b: string): number {
   if (a.length === 0) return b.length;
   if (b.length === 0) return a.length;
 
-  const matrix: number[][] = [];
-
-  // Initialize matrix
-  for (let i = 0; i <= b.length; i++) {
-    matrix[i] = [i];
-  }
-  for (let j = 0; j <= a.length; j++) {
-    matrix[0]![j] = j;
+  // Optimize: ensure 'a' is the shorter string to minimize space usage
+  if (a.length > b.length) {
+    [a, b] = [b, a];
   }
 
-  // Fill matrix
-  for (let i = 1; i <= b.length; i++) {
-    for (let j = 1; j <= a.length; j++) {
+  const aLen = a.length;
+  const bLen = b.length;
+
+  // Use two rows instead of full matrix: O(min(n,m)) space instead of O(n*m)
+  let prevRow = new Array<number>(aLen + 1);
+  let currRow = new Array<number>(aLen + 1);
+
+  // Initialize first row
+  for (let j = 0; j <= aLen; j++) {
+    prevRow[j] = j;
+  }
+
+  // Fill rows
+  for (let i = 1; i <= bLen; i++) {
+    currRow[0] = i;
+
+    for (let j = 1; j <= aLen; j++) {
       if (b.charAt(i - 1) === a.charAt(j - 1)) {
-        matrix[i]![j] = matrix[i - 1]![j - 1]!;
+        currRow[j] = prevRow[j - 1]!;
       } else {
-        matrix[i]![j] = Math.min(
-          matrix[i - 1]![j - 1]! + 1, // substitution
-          matrix[i]![j - 1]! + 1,     // insertion
-          matrix[i - 1]![j]! + 1      // deletion
+        currRow[j] = Math.min(
+          prevRow[j - 1]! + 1, // substitution
+          currRow[j - 1]! + 1, // insertion
+          prevRow[j]! + 1      // deletion
         );
       }
     }
+
+    // Swap rows
+    [prevRow, currRow] = [currRow, prevRow];
   }
 
-  return matrix[b.length]![a.length]!;
+  return prevRow[aLen]!;
 }
 
 /**
@@ -185,6 +197,12 @@ export function resolveDriverName(
   const normalizedInput = normalizeName(inputName);
   const inputTokens = tokenize(inputName);
 
+  // Build driver lookup map for O(1) access instead of O(n) find() calls
+  const driverMap = new Map<string, DriverRecord>();
+  for (const driver of drivers) {
+    driverMap.set(driver.id, driver);
+  }
+
   // 1. Exact match on display_name
   for (const driver of drivers) {
     if (driver.active && normalizeName(driver.display_name) === normalizedInput) {
@@ -201,7 +219,7 @@ export function resolveDriverName(
   // 2. Exact match on alias
   for (const alias of aliases) {
     if (alias.normalized_alias === normalizedInput) {
-      const driver = drivers.find((d) => d.id === alias.driver_id);
+      const driver = driverMap.get(alias.driver_id);
       if (driver && driver.active) {
         return {
           resolved: true,
@@ -216,6 +234,8 @@ export function resolveDriverName(
 
   // 3. Fuzzy matching - collect candidates with scores
   const candidates: DriverSuggestion[] = [];
+  // Track seen driver IDs for deduplication
+  const seenDriverIds = new Set<string>();
 
   for (const driver of drivers) {
     if (!driver.active) continue;
@@ -234,6 +254,7 @@ export function resolveDriverName(
         confidence,
         matchType: "fuzzy",
       });
+      seenDriverIds.add(driver.id);
     }
   }
 
@@ -241,16 +262,17 @@ export function resolveDriverName(
   for (const alias of aliases) {
     const aliasSimilarity = stringSimilarity(normalizedInput, alias.normalized_alias);
     if (aliasSimilarity >= fuzzyThreshold) {
-      const driver = drivers.find((d) => d.id === alias.driver_id);
+      const driver = driverMap.get(alias.driver_id);
       if (driver && driver.active) {
-        // Don't add duplicates
-        if (!candidates.some((c) => c.id === driver.id)) {
+        // Don't add duplicates - use Set lookup O(1) instead of array.some() O(n)
+        if (!seenDriverIds.has(driver.id)) {
           candidates.push({
             id: driver.id,
             display_name: driver.display_name,
             confidence: aliasSimilarity,
             matchType: "alias",
           });
+          seenDriverIds.add(driver.id);
         }
       }
     }

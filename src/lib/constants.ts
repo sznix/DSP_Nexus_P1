@@ -43,6 +43,9 @@ export const DISPATCHER_READONLY_COLUMNS = [
   "updated_at",
 ] as const;
 
+// Cached Set for O(1) lookups - created once instead of on every function call
+const DISPATCHER_PATCHABLE_COLUMNS_SET = new Set<string>(DISPATCHER_PATCHABLE_COLUMNS);
+
 /**
  * Validate that a PATCH payload only contains allowed columns for dispatcher.
  * Returns true if all columns are allowed, false otherwise.
@@ -50,8 +53,7 @@ export const DISPATCHER_READONLY_COLUMNS = [
 export function isValidDispatcherPatch(
   payload: Record<string, unknown>
 ): boolean {
-  const allowedSet = new Set<string>(DISPATCHER_PATCHABLE_COLUMNS);
-  return Object.keys(payload).every((key) => allowedSet.has(key));
+  return Object.keys(payload).every((key) => DISPATCHER_PATCHABLE_COLUMNS_SET.has(key));
 }
 
 /**
@@ -61,8 +63,7 @@ export function isValidDispatcherPatch(
 export function getDisallowedColumns(
   payload: Record<string, unknown>
 ): string[] {
-  const allowedSet = new Set<string>(DISPATCHER_PATCHABLE_COLUMNS);
-  return Object.keys(payload).filter((key) => !allowedSet.has(key));
+  return Object.keys(payload).filter((key) => !DISPATCHER_PATCHABLE_COLUMNS_SET.has(key));
 }
 
 /**
