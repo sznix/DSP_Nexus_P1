@@ -5,7 +5,7 @@
 import type { SyncDatabase } from "./database";
 import type { AssignmentDoc } from "./types";
 import { queueMutation } from "./sync-engine";
-import { DISPATCHER_PATCHABLE_COLUMNS } from "@/lib/constants";
+import { getDisallowedColumns } from "@/lib/constants";
 
 /**
  * Apply a local mutation to an assignment.
@@ -21,9 +21,8 @@ export async function applyLocalMutation(
   assignmentId: string,
   patch: Record<string, unknown>
 ): Promise<AssignmentDoc | null> {
-  // Validate patch against whitelist
-  const allowedSet = new Set<string>(DISPATCHER_PATCHABLE_COLUMNS);
-  const invalidKeys = Object.keys(patch).filter((key) => !allowedSet.has(key));
+  // Validate patch against whitelist using getDisallowedColumns which uses cached Set
+  const invalidKeys = getDisallowedColumns(patch);
 
   if (invalidKeys.length > 0) {
     throw new Error(`Invalid patch keys: ${invalidKeys.join(", ")}`);
