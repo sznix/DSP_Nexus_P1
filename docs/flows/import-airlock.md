@@ -137,15 +137,40 @@ sequenceDiagram
 - Returns 401 (unauthenticated) or 403 (unauthorized) on failure
 
 ### RLS Policies
-- `import_batches` - tenant-scoped SELECT/INSERT/UPDATE
-- `daily_assignments` - admin/manager INSERT, tenant-scoped UPDATE
-- `drivers` - admin/manager INSERT for auto-creation
-- `assignment_event_log` - admin/manager INSERT
+
+All policies use allow-list pattern (explicit role grants, no exclusions).
+
+| Table                    | SELECT                     | INSERT                     | UPDATE                     | DELETE |
+| ------------------------ | -------------------------- | -------------------------- | -------------------------- | ------ |
+| `import_batches`         | admin, manager             | admin, manager             | admin, manager             | admin  |
+| `daily_assignments`      | admin, manager, dispatcher | admin, manager             | admin, manager, dispatcher | admin  |
+| `drivers`                | all tenant members         | admin, manager             | admin, manager             | admin  |
+| `driver_aliases`         | all tenant members         | admin, manager             | admin, manager             | admin  |
+| `assignment_event_log`   | admin, manager, dispatcher | admin, manager, dispatcher | (blocked)                  | admin  |
+| `work_days`              | all tenant members         | admin, manager             | admin, manager             | admin  |
+
+**Role Exclusions:**
+
+- `mechanic` - Cannot access `import_batches`, `daily_assignments`, or `assignment_event_log`
+- `dispatcher` - Cannot INSERT into `import_batches` (read-only for wizard)
+
+**Migration:** See [`supabase/migrations/20241231_001_import_airlock_rls.sql`](../../supabase/migrations/20241231_001_import_airlock_rls.sql)
 
 ### Batch Isolation
 - Each batch scoped to `tenant_id`
 - Only one in-progress batch per (tenant, work_date) allowed
 - Conflict returns 409 with existing batch ID
+
+### Verification Query
+
+Run after applying RLS migration to verify policies exist:
+
+```sql
+SELECT schemaname, tablename, policyname, permissive, roles, cmd
+FROM pg_policies
+WHERE tablename IN ('import_batches', 'driver_aliases', 'assignment_event_log')
+ORDER BY tablename, policyname;
+```
 
 ## Batch Status Lifecycle
 

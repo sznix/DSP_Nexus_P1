@@ -35,6 +35,7 @@ const cspDirectives = [
   "img-src 'self' data: blob: https:",
   "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
   "style-src 'self' 'unsafe-inline'", // TODO: Replace with nonces (see docs/SECURITY_TODO.md)
+  "worker-src 'self'", // Service worker for offline sync
 ];
 
 // Build environment-specific CSP

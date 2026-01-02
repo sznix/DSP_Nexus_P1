@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   CARD_STATUS,
   KEY_STATUS,
@@ -10,6 +9,7 @@ import {
   type KeyStatus,
   type VerificationStatus,
 } from "@/lib/constants";
+import { useOfflineMutation } from "@/hooks/useOfflineMutation";
 
 type Props = {
   assignmentId: string;
@@ -25,6 +25,7 @@ type Props = {
   cardStatus: CardStatus | null;
   verificationStatus: VerificationStatus | null;
   currentKeyHolderId: string | null;
+  pendingSync?: boolean;
 };
 
 function classNames(...xs: Array<string | false | null | undefined>) {
@@ -45,8 +46,9 @@ export default function SnakeWalkCard({
   cardStatus,
   verificationStatus,
   currentKeyHolderId,
+  pendingSync,
 }: Props) {
-  const router = useRouter();
+  const { toggleKey: toggleKeyMutation, cycleCard, toggleVerify: toggleVerifyMutation, transferKeys, returnKeys } = useOfflineMutation();
   const [busy, setBusy] = useState<null | "key" | "card" | "verify" | "transfer" | "return">(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,35 +59,13 @@ export default function SnakeWalkCard({
     !!currentKeyHolderId &&
     driverId !== currentKeyHolderId;
 
-  async function patch(patchData: Record<string, unknown>) {
-    setError(null);
-    const res = await fetch(`/api/dispatch/assignments/${assignmentId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ patch: patchData }),
-    });
-
-    if (!res.ok) {
-      const data = await res.json().catch(() => null);
-      setError(data?.error ?? "Update failed");
-      return false;
-    }
-
-    router.refresh();
-    return true;
-  }
-
   async function toggleKey() {
     setBusy("key");
+    setError(null);
     try {
-      if (keyStatus === KEY_STATUS.WITH_DRIVER) {
-        await patch({ key_status: KEY_STATUS.STATION });
-      } else {
-        await patch({
-          key_status: KEY_STATUS.WITH_DRIVER,
-          current_key_holder_id: driverId,
-        });
-      }
+      await toggleKeyMutation(assignmentId, keyStatus, driverId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Update failed");
     } finally {
       setBusy(null);
     }
@@ -93,12 +73,11 @@ export default function SnakeWalkCard({
 
   async function toggleCard() {
     setBusy("card");
+    setError(null);
     try {
-      if (cardStatus === CARD_STATUS.GIVEN) {
-        await patch({ card_status: CARD_STATUS.NOT_GIVEN });
-      } else {
-        await patch({ card_status: CARD_STATUS.GIVEN });
-      }
+      await cycleCard(assignmentId, cardStatus);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Update failed");
     } finally {
       setBusy(null);
     }
@@ -106,12 +85,11 @@ export default function SnakeWalkCard({
 
   async function toggleVerify() {
     setBusy("verify");
+    setError(null);
     try {
-      if (verificationStatus === VERIFICATION_STATUS.VERIFIED) {
-        await patch({ verification_status: VERIFICATION_STATUS.PENDING });
-      } else {
-        await patch({ verification_status: VERIFICATION_STATUS.VERIFIED });
-      }
+      await toggleVerifyMutation(assignmentId, verificationStatus);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Update failed");
     } finally {
       setBusy(null);
     }
@@ -119,11 +97,13 @@ export default function SnakeWalkCard({
 
   async function transferKeysToDriver() {
     setBusy("transfer");
+    setError(null);
     try {
-      await patch({
-        key_status: KEY_STATUS.WITH_DRIVER,
-        current_key_holder_id: driverId,
-      });
+      if (driverId) {
+        await transferKeys(assignmentId, driverId);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Update failed");
     } finally {
       setBusy(null);
     }
@@ -131,11 +111,11 @@ export default function SnakeWalkCard({
 
   async function returnKeysToStation() {
     setBusy("return");
+    setError(null);
     try {
-      await patch({
-        key_status: KEY_STATUS.STATION,
-        current_key_holder_id: null,
-      });
+      await returnKeys(assignmentId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Update failed");
     } finally {
       setBusy(null);
     }
@@ -173,7 +153,17 @@ export default function SnakeWalkCard({
     "rounded-lg border text-sm font-semibold px-3 py-3 transition disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 flex-1 text-center";
 
   return (
-    <div className="bg-white/5 backdrop-blur-lg rounded-xl border border-white/10 p-4">
+    <div className={classNames(
+      "bg-white/5 backdrop-blur-lg rounded-xl border p-4",
+      pendingSync ? "border-yellow-500/30" : "border-white/10"
+    )}>
+      {/* Pending sync indicator */}
+      {pendingSync && (
+        <div className="flex items-center gap-1 text-xs text-yellow-300 mb-2">
+          <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
+          Pending sync
+        </div>
+      )}
       {/* Header: Spot + Van */}
       <div className="flex items-start justify-between mb-3">
         <div>
