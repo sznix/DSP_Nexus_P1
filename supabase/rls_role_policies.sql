@@ -166,11 +166,14 @@ USING (
 
 ALTER TABLE public.driver_aliases ENABLE ROW LEVEL SECURITY;
 
--- SELECT: All tenant members can read aliases (needed for name matching)
+-- SELECT: admin, manager, and dispatcher ONLY (mechanic excluded)
 CREATE POLICY "driver_aliases_select_own_tenant"
 ON public.driver_aliases
 FOR SELECT
-USING (tenant_id IN (SELECT get_user_tenant_ids()));
+USING (
+  tenant_id IN (SELECT get_user_tenant_ids())
+  AND get_user_role_in_tenant(tenant_id) IN ('admin', 'manager', 'dispatcher')
+);
 
 -- INSERT: admin and manager only
 CREATE POLICY "driver_aliases_insert_admin_manager"
@@ -229,14 +232,9 @@ WITH CHECK (
 -- UPDATE: No updates allowed on audit logs (append-only)
 -- No policy = blocked by default
 
--- DELETE: admin only (for data retention cleanup)
-CREATE POLICY "assignment_event_log_delete_admin_only"
-ON public.assignment_event_log
-FOR DELETE
-USING (
-  tenant_id IN (SELECT get_user_tenant_ids())
-  AND get_user_role_in_tenant(tenant_id) IN ('admin')
-);
+-- DELETE: No deletes allowed on audit logs (append-only, immutable)
+-- No policy = blocked by default
+-- Data retention handled separately if needed
 
 
 -- =============================================================================
@@ -534,3 +532,18 @@ USING (
 
 -- INSERT/DELETE: Typically handled by platform admin, not tenant users
 -- No policies - blocked by default
+
+
+-- =============================================================================
+-- VERIFICATION BLOCK
+-- =============================================================================
+-- After applying policies, verify with:
+--
+-- SELECT schemaname, tablename, policyname, permissive, roles, cmd
+-- FROM pg_policies
+-- WHERE tablename IN ('import_batches', 'driver_aliases', 'assignment_event_log')
+-- ORDER BY tablename, policyname;
+--
+-- Grep check for legacy functions (should return NO matches):
+-- rg -n "auth\.user_tenant_id|auth\.has_role|role\s*<>|!=\s*'mechanic'" supabase
+-- =============================================================================
